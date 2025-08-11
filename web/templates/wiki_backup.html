@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="{{if eq .wiki.Settings.Language "zh"}}zh-CN{{else}}en{{end}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.wiki.Title}} - KWiki</title>
+    <meta name="description" content="{{.wiki.Description}}">
+    <meta name="keywords" content="{{range .wiki.Tags}}{{.}},{{end}}documentation,wiki">
+
+    <!-- External Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Wiki Viewer Script - Must be loaded before Alpine.js -->
+    <script>
+        function wikiViewer() {
+            return {
+                // View state
+                view: 'page',
+                currentPage: '{{if .wiki.Pages}}{{(index .wiki.Pages 0).ID}}{{end}}',
+                currentDiagram: '',
+
+                // UI state
+                sidebarOpen: false,
+                showChat: false,
+                showSearch: false,
+                showExportMenu: false,
+                showTableOfContents: true,
+                showRightToc: true,
+
+                // Chat state
+                chatMessage: '',
+                chatResponse: '',
+                isLoading: false,
+
+                // Search state
+                searchQuery: '',
+                searchResults: [],
+
+                // Content state
+                pageTableOfContents: [],
+                rightTocItems: [],
+                activeHeadingId: '',
+                scrollProgress: 0,
+
+                // Data
+                pages: {{.wiki.Pages | jsonRaw}},
+                diagrams: {{.wiki.Diagrams | jsonRaw}},
+
+                init() {
+                    // Initialize UI state
+                    this.showChat = false;
+                    this.showSearch = false;
+                    this.showExportMenu = false;
+                    this.sidebarOpen = window.innerWidth >= 768; // Open on desktop by default
+
+                    // Initialize Mermaid with better error handling
+                    try {
+                        mermaid.initialize({
+                            startOnLoad: false,
+                            theme: 'default',
+                            securityLevel: 'loose',
+                            logLevel: 'error',
+                            flowchart: {
+                                useMaxWidth: true,
+                                htmlLabels: true
+                            },
+                            sequence: {
+                                useMaxWidth: true
+                            },
+                            gantt: {
+                                useMaxWidth: true
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Mermaid initialization failed:', error);
+                    }
+
+                    // Show first page by default
+                    if (this.pages.length > 0) {
+                        this.showPage(this.pages[0].id);
+                    }
+
+                    // Setup scroll listener for progress bar and TOC
+                    this.setupScrollListener();
+                    this.setupTocScrollListener();
+
+                    // Setup responsive behavior
+                    window.addEventListener('resize', () => {
+                        if (window.innerWidth >= 768) {
+                            this.sidebarOpen = true;
+                        } else {
+                            this.sidebarOpen = false;
+                        }
+
+                        // Hide right TOC on smaller screens
+                        if (window.innerWidth < 1280) {
+                            this.showRightToc = false;
+                        } else {
+                            this.showRightToc = true;
+                        }
+                    });
+
+                    console.log('Wiki viewer initialized:', {
+                        pages: this.pages.length,
+                        diagrams: this.diagrams.length,
+                        language: '{{.wiki.Settings.Language}}'
+                    });
+                },
+
+                // New methods
+                getCurrentPageTitle() {
+                    const page = this.pages.find(p => p.id === this.currentPage);
+                    return page ? page.title : '';
+                },
+
+                setupScrollListener() {
+                    const main = document.querySelector('main');
+                    if (main) {
+                        main.addEventListener('scroll', () => {
+                            const scrollTop = main.scrollTop;
+                            const scrollHeight = main.scrollHeight - main.clientHeight;
+                            this.scrollProgress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+                        });
+                    }
+                },
+
+                setupTocScrollListener() {
+                    const main = document.querySelector('#main-content');
+                    if (main) {
+                        main.addEventListener('scroll', () => {
+                            this.updateActiveHeading();
+                        });
+                    }
+                },
+
+                updateActiveHeading() {
+                    const headings = document.querySelectorAll('.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6');
+                    const main = document.querySelector('#main-content');
+
+                    if (!main || headings.length === 0) return;
+
+                    const scrollTop = main.scrollTop;
+                    const offset = 100; // 偏移量，提前高亮
+
+                    let activeHeading = null;
+
+                    for (let i = headings.length - 1; i >= 0; i--) {
+                        const heading = headings[i];
+                        const rect = heading.getBoundingClientRect();
+                        const mainRect = main.getBoundingClientRect();
+
+                        // 计算相对于main容器的位置
+                        const relativeTop = rect.top - mainRect.top + scrollTop;
+
+                        if (relativeTop <= scrollTop + offset) {
+                            activeHeading = heading;
+                            break;
+                        }
+                    }
+
+                    if (activeHeading) {
+                        this.activeHeadingId = activeHeading.id;
+                    }
+                },
+
+                toggleTableOfContents() {
+                    this.showTableOfContents = !this.showTableOfContents;
+                },
+
+                toggleRightToc() {
+                    this.showRightToc = !this.showRightToc;
+                },
+
+                copyWikiLink() {
+                    const url = window.location.href;
+                    navigator.clipboard.writeText(url).then(() => {
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}Wiki链接已复制到剪贴板！{{else}}Wiki link copied to clipboard!{{end}}');
+                    }).catch(() => {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}Wiki链接已复制到剪贴板！{{else}}Wiki link copied to clipboard!{{end}}');
+                    });
+                },
+
+                showPage(pageId) {
+                    this.view = 'page';
+                    this.currentPage = pageId;
+                    this.currentDiagram = '';
+                    this.activeHeadingId = '';
+                    this.$nextTick(() => {
+                        this.renderMermaidDiagrams();
+                        this.generateTableOfContents();
+                        this.generateRightToc();
+                        // 延迟一点再设置滚动监听，确保DOM已更新
+                        setTimeout(() => {
+                            this.updateActiveHeading();
+                        }, 100);
+                    });
+                },
+
+                showDiagram(diagramId) {
+                    this.view = 'diagram';
+                    this.currentDiagram = diagramId;
+                    this.currentPage = '';
+                    this.$nextTick(() => {
+                        this.renderMermaidDiagrams();
+                    });
+                },
+
+                async renderMermaidDiagrams() {
+                    try {
+                        const mermaidElements = document.querySelectorAll('.mermaid');
+                        for (let element of mermaidElements) {
+                            if (element.getAttribute('data-processed') !== 'true') {
+                                const graphDefinition = element.textContent;
+                                if (graphDefinition && graphDefinition.trim()) {
+                                    const { svg } = await mermaid.render(`mermaid-${Date.now()}-${Math.random()}`, graphDefinition);
+                                    element.innerHTML = svg;
+                                    element.setAttribute('data-processed', 'true');
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Mermaid rendering failed:', error);
+                        // Show error message in diagram containers
+                        const mermaidElements = document.querySelectorAll('.mermaid');
+                        mermaidElements.forEach(element => {
+                            if (element.getAttribute('data-processed') !== 'true') {
+                                element.innerHTML = '<div class="text-red-500 p-4 border border-red-300 rounded">Failed to render diagram</div>';
+                                element.setAttribute('data-processed', 'true');
+                            }
+                        });
+                    }
+                },
+
+                renderMarkdown(content) {
+                    return marked.parse(content || '');
+                },
+
+                copyPageLink(pageId) {
+                    const url = `${window.location.origin}/wiki/{{.wiki.ID}}/page/${pageId}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}页面链接已复制到剪贴板！{{else}}Page link copied to clipboard!{{end}}');
+                    }).catch(() => {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}页面链接已复制到剪贴板！{{else}}Page link copied to clipboard!{{end}}');
+                    });
+                },
+
+                printPage() {
+                    window.print();
+                },
+
+                showNotification(message) {
+                    // Simple notification - you could enhance this with a proper notification system
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                    notification.textContent = message;
+                    document.body.appendChild(notification);
+
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                },
+
+                async sendMessage() {
+                    if (!this.chatMessage.trim()) return;
+
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/wiki/{{.wiki.ID}}/chat`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                message: this.chatMessage
+                            })
+                        });
+
+                        const result = await response.json();
+                        if (response.ok) {
+                            this.chatResponse = result.content;
+                        } else {
+                            this.chatResponse = 'Error: ' + result.error;
+                        }
+                    } catch (error) {
+                        this.chatResponse = 'Error: ' + error.message;
+                    } finally {
+                        this.isLoading = false;
+                        this.chatMessage = '';
+                    }
+                },
+
+                async performSearch() {
+                    if (!this.searchQuery.trim()) {
+                        this.searchResults = [];
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/wiki/{{.wiki.ID}}/search?q=${encodeURIComponent(this.searchQuery)}`);
+                        const results = await response.json();
+                        this.searchResults = results || [];
+                    } catch (error) {
+                        console.error('Search error:', error);
+                        this.searchResults = [];
+                    }
+                },
+
+                goToResult(result) {
+                    this.showSearch = false;
+                    this.searchQuery = '';
+
+                    if (result.type === 'page') {
+                        this.showPage(result.page_id || result.id);
+                        // Scroll to highlighted content after a short delay
+                        setTimeout(() => {
+                            this.highlightSearchTerm(this.searchQuery);
+                        }, 100);
+                    } else if (result.type === 'diagram') {
+                        this.showDiagram(result.diagram_id || result.id);
+                    }
+                },
+
+                highlightSearchTerm(term) {
+                    if (!term) return;
+
+                    // Remove previous highlights
+                    const existingHighlights = document.querySelectorAll('.search-highlight');
+                    existingHighlights.forEach(el => {
+                        const parent = el.parentNode;
+                        parent.replaceChild(document.createTextNode(el.textContent), el);
+                        parent.normalize();
+                    });
+
+                    // Add new highlights to prose content
+                    const proseElement = document.querySelector('.prose');
+                    if (proseElement) {
+                        const walker = document.createTreeWalker(
+                            proseElement,
+                            NodeFilter.SHOW_TEXT,
+                            null,
+                            false
+                        );
+
+                        const textNodes = [];
+                        let node;
+                        while (node = walker.nextNode()) {
+                            textNodes.push(node);
+                        }
+
+                        textNodes.forEach(textNode => {
+                            const text = textNode.textContent;
+                            const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                            if (regex.test(text)) {
+                                const highlightedHTML = text.replace(regex, '<span class="search-highlight">$1</span>');
+                                const wrapper = document.createElement('div');
+                                wrapper.innerHTML = highlightedHTML;
+                                const parent = textNode.parentNode;
+                                while (wrapper.firstChild) {
+                                    parent.insertBefore(wrapper.firstChild, textNode);
+                                }
+                                parent.removeChild(textNode);
+                            }
+                        });
+                    }
+                },
+
+                generateTableOfContents() {
+                    this.pageTableOfContents = [];
+                    const proseElement = document.querySelector('.prose');
+                    if (!proseElement) return;
+
+                    const headings = proseElement.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    headings.forEach((heading, index) => {
+                        const level = parseInt(heading.tagName.charAt(1));
+                        const text = heading.textContent.trim();
+                        const id = `heading-${index}`;
+
+                        // Add ID to heading for linking
+                        heading.id = id;
+
+                        this.pageTableOfContents.push({
+                            id: id,
+                            text: text,
+                            level: level
+                        });
+                    });
+                },
+
+                generateRightToc() {
+                    this.rightTocItems = [];
+                    const proseElement = document.querySelector('.prose');
+                    if (!proseElement) return;
+
+                    const headings = proseElement.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    headings.forEach((heading, index) => {
+                        const level = parseInt(heading.tagName.charAt(1));
+                        const text = heading.textContent.trim();
+                        let id = heading.id;
+
+                        // 如果没有ID，创建一个
+                        if (!id) {
+                            id = `heading-${index}`;
+                            heading.id = id;
+                        }
+
+                        // 只显示h1-h4级别的标题，避免目录过于复杂
+                        if (level <= 4) {
+                            this.rightTocItems.push({
+                                id: id,
+                                text: text,
+                                level: level
+                            });
+                        }
+                    });
+
+                    // 如果有标题，默认激活第一个
+                    if (this.rightTocItems.length > 0) {
+                        this.activeHeadingId = this.rightTocItems[0].id;
+                    }
+                },
+
+                scrollToHeading(headingId) {
+                    const element = document.getElementById(headingId);
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Alpine.js - Must be loaded after wikiViewer function -->
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+    <!-- Custom Styles -->
+    <style>
+        /* 中文字体优化 */
+        .font-chinese {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            letter-spacing: 0.02em;
+        }
+
+        /* 全局动画 */
+        * {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 玻璃态效果 */
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* 渐变背景 */
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .gradient-bg-light {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .gradient-bg-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+
+        /* 悬浮效果 */
+        .hover-lift {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .hover-lift:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        /* 代码块样式增强 */
+        .prose pre {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border: 1px solid #475569;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            overflow-x: auto;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .prose pre::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #f59e0b, #ef4444, #8b5cf6, #06b6d4);
+            border-radius: 0.75rem 0.75rem 0 0;
+        }
+
+        .prose pre code {
+            background: transparent;
+            padding: 0;
+            color: #e2e8f0;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', Consolas, monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        .prose code {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.875em;
+            font-weight: 600;
+            border: 1px solid #fbbf24;
+        }
+
+        /* 表格样式增强 */
+        .prose table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .prose th {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .prose td {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0.75rem 1rem;
+            transition: background-color 0.2s ease;
+        }
+
+        .prose tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        .prose tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* 引用块样式增强 */
+        .prose blockquote {
+            border-left: 4px solid #3b82f6;
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            border-radius: 0 0.75rem 0.75rem 0;
+            position: relative;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .prose blockquote::before {
+            content: '"';
+            position: absolute;
+            top: -0.5rem;
+            left: 1rem;
+            font-size: 3rem;
+            color: #3b82f6;
+            opacity: 0.3;
+            font-family: Georgia, serif;
+        }
+
+        /* 搜索高亮增强 */
+        .search-highlight {
+            background: linear-gradient(135deg, #fef08a 0%, #fde047 100%);
+            padding: 0.125rem 0.375rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            animation: highlight-pulse 2s ease-in-out;
+        }
+
+        @keyframes highlight-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        /* 滚动条样式增强 */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 4px;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        }
+
+        /* 按钮增强效果 */
+        .btn-enhanced {
+            position: relative;
+            overflow: hidden;
+            transform: perspective(1px) translateZ(0);
+        }
+
+        .btn-enhanced::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .btn-enhanced:hover::before {
+            left: 100%;
+        }
+
+        /* 卡片增强效果 */
+        .card-enhanced {
+            background: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-enhanced:hover {
+            box-shadow: 0 20px 25px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        /* 进度条增强 */
+        .progress-enhanced {
+            background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 100%);
+            border-radius: 9999px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-enhanced::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* 标签增强效果 */
+        .tag-enhanced {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .tag-enhanced:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+        }
+
+        /* 打印样式 */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            .prose {
+                max-width: none !important;
+            }
+
+            * {
+                background: white !important;
+                color: black !important;
+                box-shadow: none !important;
+            }
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .sidebar-mobile {
+                transform: translateX(-100%);
+                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .sidebar-mobile.open {
+                transform: translateX(0);
+            }
+
+            .prose pre {
+                padding: 1rem;
+                font-size: 0.8rem;
+            }
+
+            .prose table {
+                font-size: 0.875rem;
+            }
+        }
+
+        /* 加载动画 */
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* 淡入动画 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 脉冲动画 */
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* 右侧目录导航 */
+        .toc-sidebar {
+            position: fixed;
+            top: 50%;
+            right: 2rem;
+            transform: translateY(-50%);
+            max-height: 70vh;
+            width: 240px;
+            z-index: 30;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .toc-sidebar.hidden {
+            opacity: 0;
+            transform: translateY(-50%) translateX(100%);
+            pointer-events: none;
+        }
+
+        .toc-item {
+            position: relative;
+            transition: all 0.2s ease;
+        }
+
+        .toc-item::before {
+            content: '';
+            position: absolute;
+            left: -1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2px;
+            height: 0;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: height 0.3s ease;
+        }
+
+        .toc-item.active::before {
+            height: 100%;
+        }
+
+        .toc-item.active {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left: 3px solid #3b82f6;
+        }
+
+        .toc-link {
+            display: block;
+            padding: 0.5rem 0.75rem;
+            text-decoration: none;
+            color: #6b7280;
+            font-size: 0.875rem;
+            line-height: 1.4;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease;
+        }
+
+        .toc-link:hover {
+            color: #3b82f6;
+            background-color: #f8fafc;
+        }
+
+        .toc-item.active .toc-link {
+            color: #1d4ed8;
+            font-weight: 600;
+        }
+
+        .toc-level-1 { margin-left: 0; }
+        .toc-level-2 { margin-left: 1rem; }
+        .toc-level-3 { margin-left: 2rem; }
+        .toc-level-4 { margin-left: 3rem; }
+        .toc-level-5 { margin-left: 4rem; }
+        .toc-level-6 { margin-left: 5rem; }
+
+        /* 目录滚动条 */
+        .toc-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .toc-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .toc-content::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+
+        .toc-content::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* 目录切换按钮 */
+        .toc-toggle {
+            position: fixed;
+            top: 50%;
+            right: 1rem;
+            transform: translateY(-50%);
+            z-index: 31;
+            transition: all 0.3s ease;
+        }
+
+        .toc-toggle.with-sidebar {
+            right: 17rem;
+        }
+
+        /* 响应式隐藏 */
+        @media (max-width: 1280px) {
+            .toc-sidebar {
+                display: none;
+            }
+
+            .toc-toggle {
+                display: none;
+            }
+        }
+
+        /* 内容区域调整 */
+        @media (min-width: 1280px) {
+            .content-with-toc {
+                margin-right: 280px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-chinese">
+    <div x-data="wikiViewer()" class="flex h-screen relative">
+        <!-- Mobile Menu Button -->
+        <button @click="sidebarOpen = !sidebarOpen"
+                class="md:hidden fixed top-4 left-4 z-50 bg-white p-2 rounded-lg shadow-lg no-print">
+            <i class="fas fa-bars text-gray-600"></i>
+        </button>
+
+        <!-- Mobile Overlay -->
+        <div x-show="sidebarOpen"
+             @click="sidebarOpen = false"
+             x-transition:enter="transition-opacity ease-linear duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-linear duration-300"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+
+        <!-- Sidebar -->
+        <div class="w-64 glass-effect shadow-2xl flex flex-col fixed md:relative h-full z-40 sidebar-mobile custom-scrollbar border-r border-gray-200"
+             :class="{'open': sidebarOpen}"
+             x-show="sidebarOpen || window.innerWidth >= 768"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="transform -translate-x-full"
+             x-transition:enter-end="transform translate-x-0"
+             x-transition:leave="transition ease-in duration-300"
+             x-transition:leave-start="transform translate-x-0"
+             x-transition:leave-end="transform -translate-x-full">
+            <!-- Header -->
+            <div class="p-6 border-b border-gray-200 gradient-bg text-white relative overflow-hidden">
+                <!-- 装饰性背景元素 -->
+                <div class="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-y-16 translate-x-16"></div>
+                <div class="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-5 rounded-full translate-y-12 -translate-x-12"></div>
+
+                <div class="flex items-start justify-between relative z-10">
+                    <div class="flex-1">
+                        <div class="flex items-center mb-2">
+                            <div class="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-book text-white text-sm"></i>
+                            </div>
+                            <h1 class="text-xl font-bold text-white leading-tight">{{.wiki.Title}}</h1>
+                        </div>
+                        <p class="text-blue-100 text-sm leading-relaxed opacity-90">{{.wiki.Description}}</p>
+                    </div>
+                    <!-- Close button for mobile -->
+                    <button @click="sidebarOpen = false"
+                            class="md:hidden text-white hover:text-blue-200 p-2 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all duration-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Repository Info -->
+                {{if .wiki.PackagePath}}
+                <div class="mt-4 p-3 bg-white bg-opacity-20 rounded-xl border border-white border-opacity-30 backdrop-blur-sm">
+                    <div class="flex items-center text-sm text-white">
+                        <div class="w-6 h-6 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fab fa-github text-white text-xs"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="text-blue-100 text-xs opacity-75 mb-1">{{if eq .wiki.Settings.Language "zh"}}代码仓库{{else}}Repository{{end}}</div>
+                            <code class="text-white font-mono text-xs break-all">{{.wiki.PackagePath}}</code>
+                        </div>
+                    </div>
+                </div>
+                {{end}}
+
+                <!-- Tags -->
+                {{if .wiki.Tags}}
+                <div class="mt-4">
+                    <div class="text-blue-100 text-xs opacity-75 mb-2">{{if eq .wiki.Settings.Language "zh"}}标签{{else}}Tags{{end}}</div>
+                    <div class="flex flex-wrap gap-2">
+                        {{range .wiki.Tags}}
+                        <span class="inline-block bg-white bg-opacity-20 text-white text-xs px-3 py-1 rounded-full font-medium border border-white border-opacity-30 hover:bg-opacity-30 transition-all duration-200">{{.}}</span>
+                        {{end}}
+                    </div>
+                </div>
+                {{end}}
+
+                <!-- Quick Stats -->
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    <div class="bg-white bg-opacity-20 p-3 rounded-xl text-center border border-white border-opacity-30 hover-lift">
+                        <div class="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <i class="fas fa-file-alt text-white text-sm"></i>
+                        </div>
+                        <div class="font-bold text-white text-lg" x-text="pages.length"></div>
+                        <div class="text-blue-100 text-xs opacity-75">{{if eq .wiki.Settings.Language "zh"}}页面{{else}}Pages{{end}}</div>
+                    </div>
+                    <div class="bg-white bg-opacity-20 p-3 rounded-xl text-center border border-white border-opacity-30 hover-lift" x-show="diagrams.length > 0">
+                        <div class="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mx-auto mb-2">
+                            <i class="fas fa-project-diagram text-white text-sm"></i>
+                        </div>
+                        <div class="font-bold text-white text-lg" x-text="diagrams.length"></div>
+                        <div class="text-blue-100 text-xs opacity-75">{{if eq .wiki.Settings.Language "zh"}}图表{{else}}Diagrams{{end}}</div>
+                    </div>
+                </div>
+
+                <!-- Generation Info -->
+                <div class="mt-4 bg-white bg-opacity-20 p-3 rounded-xl border border-white border-opacity-30">
+                    <div class="text-blue-100 text-xs opacity-75 mb-2">{{if eq .wiki.Settings.Language "zh"}}生成信息{{else}}Generation Info{{end}}</div>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-white text-xs">{{if eq .wiki.Settings.Language "zh"}}AI模型{{else}}AI Model{{end}}</span>
+                            <span class="text-blue-100 font-mono text-xs bg-white bg-opacity-10 px-2 py-1 rounded">{{.wiki.Settings.Model}}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-white text-xs">{{if eq .wiki.Settings.Language "zh"}}提供商{{else}}Provider{{end}}</span>
+                            <span class="text-blue-100 text-xs capitalize bg-white bg-opacity-10 px-2 py-1 rounded">{{.wiki.Settings.AIProvider}}</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-white text-xs">{{if eq .wiki.Settings.Language "zh"}}语言{{else}}Language{{end}}</span>
+                            <span class="text-blue-100 text-xs uppercase bg-white bg-opacity-10 px-2 py-1 rounded">{{.wiki.Settings.Language}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gray-50">
+                <div class="space-y-6">
+                    <!-- Pages Section -->
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-bold text-gray-800 flex items-center">
+                                <div class="w-6 h-6 gradient-bg rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-file-text text-white text-xs"></i>
+                                </div>
+                                {{if eq .wiki.Settings.Language "zh"}}页面{{else}}Pages{{end}}
+                            </h3>
+                            <span class="text-xs text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm border tag-enhanced" x-text="pages.length"></span>
+                        </div>
+                        <ul class="space-y-2">
+                            {{range $index, $page := .wiki.Pages}}
+                            <li>
+                                <a href="#page-{{.ID}}"
+                                   @click="showPage('{{.ID}}'); sidebarOpen = false"
+                                   class="group block p-4 text-sm card-enhanced hover-lift transition-all duration-300"
+                                   :class="{'gradient-bg text-white shadow-lg': currentPage === '{{.ID}}', 'text-gray-700 hover:shadow-md': currentPage !== '{{.ID}}'}">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1">
+                                            <div class="font-semibold mb-1" :class="{'text-white': currentPage === '{{.ID}}', 'text-gray-900': currentPage !== '{{.ID}}'}">{{.Title}}</div>
+                                            {{if .Type}}
+                                            <div class="text-xs capitalize mb-2" :class="{'text-blue-100': currentPage === '{{.ID}}', 'text-gray-500': currentPage !== '{{.ID}}'}">
+                                                <i class="fas fa-tag mr-1"></i>{{.Type}}
+                                            </div>
+                                            {{end}}
+                                            <div class="flex items-center space-x-3 text-xs" :class="{'text-blue-100': currentPage === '{{.ID}}', 'text-gray-500': currentPage !== '{{.ID}}'}">
+                                                {{if .ReadingTime}}
+                                                <span class="flex items-center">
+                                                    <i class="fas fa-clock mr-1"></i>
+                                                    {{.ReadingTime}}{{if eq $.wiki.Settings.Language "zh"}}分钟{{else}}min{{end}}
+                                                </span>
+                                                {{end}}
+                                                {{if .WordCount}}
+                                                <span class="flex items-center">
+                                                    <i class="fas fa-file-word mr-1"></i>
+                                                    {{.WordCount}}{{if eq $.wiki.Settings.Language "zh"}}字{{else}}words{{end}}
+                                                </span>
+                                                {{end}}
+                                            </div>
+                                        </div>
+                                        <div class="ml-3">
+                                            <i class="fas fa-chevron-right text-xs transition-transform duration-200 group-hover:translate-x-1"
+                                               :class="{'text-white': currentPage === '{{.ID}}', 'text-gray-400': currentPage !== '{{.ID}}'}"></i>
+                                        </div>
+                                    </div>
+                                </a>
+                            </li>
+                            {{end}}
+                        </ul>
+                    </div>
+
+                    <!-- Diagrams Section -->
+                    {{if .wiki.Diagrams}}
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-bold text-gray-800 flex items-center">
+                                <div class="w-6 h-6 gradient-bg-success rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-project-diagram text-white text-xs"></i>
+                                </div>
+                                {{if eq .wiki.Settings.Language "zh"}}图表{{else}}Diagrams{{end}}
+                            </h3>
+                            <span class="text-xs text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm border tag-enhanced" x-text="diagrams.length"></span>
+                        </div>
+                        <ul class="space-y-2">
+                            {{range .wiki.Diagrams}}
+                            <li>
+                                <a href="#diagram-{{.ID}}"
+                                   @click="showDiagram('{{.ID}}'); sidebarOpen = false"
+                                   class="group block p-4 text-sm card-enhanced hover-lift transition-all duration-300"
+                                   :class="{'gradient-bg-success text-white shadow-lg': currentDiagram === '{{.ID}}', 'text-gray-700 hover:shadow-md': currentDiagram !== '{{.ID}}'}">
+                                    <div class="flex items-start">
+                                        <div class="flex-1">
+                                            <div class="font-semibold mb-1" :class="{'text-white': currentDiagram === '{{.ID}}', 'text-gray-900': currentDiagram !== '{{.ID}}'}">{{.Title}}</div>
+                                            {{if .Description}}
+                                            <div class="text-xs leading-relaxed" :class="{'text-blue-100': currentDiagram === '{{.ID}}', 'text-gray-500': currentDiagram !== '{{.ID}}'}">{{.Description}}</div>
+                                            {{end}}
+                                        </div>
+                                        <div class="ml-3">
+                                            <i class="fas fa-chevron-right text-xs transition-transform duration-200 group-hover:translate-x-1"
+                                               :class="{'text-white': currentDiagram === '{{.ID}}', 'text-gray-400': currentDiagram !== '{{.ID}}'}"></i>
+                                        </div>
+                                    </div>
+                                </a>
+                            </li>
+                            {{end}}
+                        </ul>
+                    </div>
+                    {{end}}
+
+                    <!-- Quick Actions -->
+                    <div class="pt-6 border-t border-gray-200">
+                        <h3 class="text-sm font-bold text-gray-800 mb-4 flex items-center">
+                            <div class="w-6 h-6 gradient-bg-light rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-bolt text-white text-xs"></i>
+                            </div>
+                            {{if eq .wiki.Settings.Language "zh"}}快速操作{{else}}Quick Actions{{end}}
+                        </h3>
+                        <div class="space-y-3">
+                            <button @click="showSearch = true; sidebarOpen = false"
+                                    class="w-full flex items-center p-3 text-sm card-enhanced hover-lift btn-enhanced gradient-bg text-white transition-all duration-300">
+                                <div class="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-search text-white text-sm"></i>
+                                </div>
+                                <span class="font-medium">{{if eq .wiki.Settings.Language "zh"}}搜索内容{{else}}Search Content{{end}}</span>
+                            </button>
+                            <button @click="toggleTableOfContents()"
+                                    class="w-full flex items-center p-3 text-sm card-enhanced hover-lift btn-enhanced bg-white text-gray-700 border border-gray-200 transition-all duration-300">
+                                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-list text-green-600 text-sm"></i>
+                                </div>
+                                <span class="font-medium">{{if eq .wiki.Settings.Language "zh"}}目录导航{{else}}Table of Contents{{end}}</span>
+                            </button>
+                            <button @click="printPage()"
+                                    class="w-full flex items-center p-3 text-sm card-enhanced hover-lift btn-enhanced bg-white text-gray-700 border border-gray-200 transition-all duration-300">
+                                <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-print text-purple-600 text-sm"></i>
+                                </div>
+                                <span class="font-medium">{{if eq .wiki.Settings.Language "zh"}}打印页面{{else}}Print Page{{end}}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-gray-200 bg-white">
+                <!-- Export Menu -->
+                <div class="relative mb-4">
+                    <button @click="showExportMenu = !showExportMenu"
+                            class="w-full flex items-center justify-center p-3 gradient-bg text-white rounded-xl text-sm font-medium hover-lift btn-enhanced transition-all duration-300 shadow-lg">
+                        <div class="w-6 h-6 bg-white bg-opacity-20 rounded-lg flex items-center justify-center mr-3">
+                            <i class="fas fa-download text-white text-sm"></i>
+                        </div>
+                        {{if eq .wiki.Settings.Language "zh"}}导出文档{{else}}Export Wiki{{end}}
+                        <i class="fas fa-chevron-up ml-3 transition-transform duration-300" :class="{'rotate-180': showExportMenu}"></i>
+                    </button>
+                    <div x-show="showExportMenu"
+                         @click.away="showExportMenu = false"
+                         x-transition:enter="transition ease-out duration-300"
+                         x-transition:enter-start="opacity-0 transform scale-95 -translate-y-2"
+                         x-transition:enter-end="opacity-100 transform scale-100 translate-y-0"
+                         x-transition:leave="transition ease-in duration-200"
+                         x-transition:leave-start="opacity-100 transform scale-100 translate-y-0"
+                         x-transition:leave-end="opacity-0 transform scale-95 -translate-y-2"
+                         class="absolute bottom-full mb-3 left-0 right-0 glass-effect shadow-2xl rounded-xl py-3 border border-gray-200">
+                        <a href="/api/wiki/{{.wiki.ID}}/export/markdown"
+                           class="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-blue-50 transition-all duration-200 hover-lift">
+                            <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
+                                <i class="fab fa-markdown text-blue-600 text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">Markdown</div>
+                                <div class="text-xs text-gray-500 mt-0.5">{{if eq .wiki.Settings.Language "zh"}}标准Markdown格式{{else}}Standard Markdown format{{end}}</div>
+                            </div>
+                            <i class="fas fa-external-link-alt text-gray-400 text-xs"></i>
+                        </a>
+                        <a href="/api/wiki/{{.wiki.ID}}/export/html"
+                           class="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-green-50 transition-all duration-200 hover-lift">
+                            <div class="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center mr-4">
+                                <i class="fas fa-code text-green-600 text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">HTML</div>
+                                <div class="text-xs text-gray-500 mt-0.5">{{if eq .wiki.Settings.Language "zh"}}网页格式{{else}}Web page format{{end}}</div>
+                            </div>
+                            <i class="fas fa-external-link-alt text-gray-400 text-xs"></i>
+                        </a>
+                        <a href="/api/wiki/{{.wiki.ID}}/export/json"
+                           class="flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-purple-50 transition-all duration-200 hover-lift">
+                            <div class="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
+                                <i class="fas fa-file-code text-purple-600 text-lg"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-semibold text-gray-900">JSON</div>
+                                <div class="text-xs text-gray-500 mt-0.5">{{if eq .wiki.Settings.Language "zh"}}结构化数据{{else}}Structured data{{end}}</div>
+                            </div>
+                            <i class="fas fa-external-link-alt text-gray-400 text-xs"></i>
+                        </a>
+                        <div class="border-t border-gray-200 my-2"></div>
+                        <button @click="copyWikiLink()"
+                                class="w-full flex items-center px-4 py-3 text-sm text-gray-700 hover:bg-yellow-50 transition-all duration-200 hover-lift">
+                            <div class="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center mr-4">
+                                <i class="fas fa-link text-yellow-600 text-lg"></i>
+                            </div>
+                            <div class="flex-1 text-left">
+                                <div class="font-semibold text-gray-900">{{if eq .wiki.Settings.Language "zh"}}复制链接{{else}}Copy Link{{end}}</div>
+                                <div class="text-xs text-gray-500 mt-0.5">{{if eq .wiki.Settings.Language "zh"}}分享此Wiki{{else}}Share this wiki{{end}}</div>
+                            </div>
+                            <i class="fas fa-copy text-gray-400 text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Wiki Info -->
+                <div class="text-center">
+                    <div class="text-xs text-gray-500 mb-3">
+                        {{if eq .wiki.Settings.Language "zh"}}生成于{{else}}Generated on{{end}}
+                        <span class="font-medium text-gray-700">{{.wiki.CreatedAt.Format "2006-01-02 15:04"}}</span>
+                    </div>
+                    <div class="flex items-center justify-center space-x-2">
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-800 text-xs font-medium border border-blue-200">
+                            <i class="fas fa-robot mr-2"></i>
+                            {{.wiki.Settings.AIProvider}}
+                        </span>
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800 text-xs font-medium border border-purple-200">
+                            <i class="fas fa-brain mr-2"></i>
+                            {{.wiki.Settings.Model}}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 flex flex-col md:ml-0" :class="{'ml-0': !sidebarOpen}">
+            <!-- Top Bar -->
+            <header class="glass-effect border-b border-gray-200 px-4 md:px-8 py-6 no-print shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-6">
+                        <!-- Breadcrumb -->
+                        <nav class="flex items-center space-x-3 text-sm">
+                            <a href="/" class="flex items-center text-gray-600 hover:text-blue-600 transition-colors duration-200 font-medium">
+                                <i class="fas fa-home mr-2"></i>
+                                KWiki
+                            </a>
+                            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                            <span class="text-gray-900 font-semibold">{{.wiki.Title}}</span>
+                            <template x-if="currentPage">
+                                <div class="flex items-center space-x-3">
+                                    <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                                    <span x-text="getCurrentPageTitle()" class="text-blue-600 font-medium"></span>
+                                </div>
+                            </template>
+                        </nav>
+
+                        <!-- Status Indicator -->
+                        <div class="hidden md:flex items-center space-x-2">
+                            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span class="text-xs text-gray-500 font-medium">{{if eq .wiki.Settings.Language "zh"}}在线{{else}}Live{{end}}</span>
+                        </div>
+                    </div>
+
+                    <!-- Top Actions -->
+                    <div class="flex items-center space-x-2">
+                        <button @click="showSearch = true"
+                                class="p-3 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover-lift"
+                                title="{{if eq .wiki.Settings.Language "zh"}}搜索{{else}}Search{{end}}">
+                            <i class="fas fa-search text-sm"></i>
+                        </button>
+                        {{if .wiki.Settings.EnableRAG}}
+                        <button @click="showChat = !showChat"
+                                class="p-3 text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-xl transition-all duration-200 hover-lift"
+                                title="{{if eq .wiki.Settings.Language "zh"}}AI助手{{else}}AI Assistant{{end}}">
+                            <i class="fas fa-comments text-sm"></i>
+                        </button>
+                        {{end}}
+                        <button @click="toggleTableOfContents()"
+                                class="p-3 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all duration-200 hover-lift"
+                                title="{{if eq .wiki.Settings.Language "zh"}}目录{{else}}Table of Contents{{end}}">
+                            <i class="fas fa-list text-sm"></i>
+                        </button>
+                        <button @click="showExportMenu = !showExportMenu"
+                                class="p-3 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all duration-200 hover-lift"
+                                title="{{if eq .wiki.Settings.Language "zh"}}导出{{else}}Export{{end}}">
+                            <i class="fas fa-download text-sm"></i>
+                        </button>
+
+                        <!-- Theme Toggle (Future Feature) -->
+                        <div class="hidden md:block w-px h-6 bg-gray-300"></div>
+                        <button class="p-3 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all duration-200 hover-lift"
+                                title="{{if eq .wiki.Settings.Language "zh"}}切换主题{{else}}Toggle Theme{{end}}">
+                            <i class="fas fa-sun text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <main class="flex-1 overflow-y-auto custom-scrollbar" id="main-content">
+                <!-- Right Side TOC -->
+                <div class="toc-sidebar glass-effect shadow-xl rounded-xl border border-gray-200 no-print"
+                     x-show="showRightToc && rightTocItems.length > 0"
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 transform translate-x-full"
+                     x-transition:enter-end="opacity-100 transform translate-x-0"
+                     x-transition:leave="transition ease-in duration-200"
+                     x-transition:leave-start="opacity-100 transform translate-x-0"
+                     x-transition:leave-end="opacity-0 transform translate-x-full">
+                    <div class="p-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-sm font-bold text-gray-800 flex items-center">
+                                <i class="fas fa-list-ul mr-2 text-blue-600"></i>
+                                {{if eq .wiki.Settings.Language "zh"}}目录{{else}}Contents{{end}}
+                            </h3>
+                            <button @click="showRightToc = false"
+                                    class="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="toc-content overflow-y-auto max-h-96 p-2">
+                        <template x-for="(item, index) in rightTocItems" :key="`toc-${index}`">
+                            <div class="toc-item"
+                                 :class="{'active': activeHeadingId === item.id, [`toc-level-${item.level}`]: true}">
+                                <a :href="`#${item.id}`"
+                                   @click="scrollToHeading(item.id)"
+                                   class="toc-link"
+                                   x-text="item.text">
+                                </a>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- TOC Toggle Button -->
+                <button @click="toggleRightToc()"
+                        class="toc-toggle bg-white shadow-lg rounded-full p-3 hover-lift no-print"
+                        :class="{'with-sidebar': showRightToc && rightTocItems.length > 0}"
+                        x-show="rightTocItems.length > 0"
+                        :title="showRightToc ? '{{if eq .wiki.Settings.Language "zh"}}隐藏目录{{else}}Hide TOC{{end}}' : '{{if eq .wiki.Settings.Language "zh"}}显示目录{{else}}Show TOC{{end}}'">
+                    <i class="fas fa-list-ul text-blue-600 transition-transform duration-200"
+                       :class="{'rotate-180': showRightToc}"></i>
+                </button>
+
+                <!-- Page Content -->
+                <div x-show="view === 'page'" class="max-w-5xl mx-auto px-4 md:px-8 py-8"
+                     :class="{'content-with-toc': showRightToc && rightTocItems.length > 0}">
+                    <template x-for="(page, pageIndex) in pages" :key="`page-${page.id || pageIndex}`">
+                        <div x-show="currentPage === page.id">
+                            <!-- Page Header -->
+                            <div class="mb-8">
+                                <div class="flex items-start justify-between mb-4">
+                                    <div class="flex-1">
+                                        <h1 class="text-4xl font-bold text-gray-900 mb-3 leading-tight" x-text="page.title"></h1>
+                                        <div class="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                                            <span class="flex items-center">
+                                                <i class="fas fa-clock mr-2 text-blue-500"></i>
+                                                <span x-text="page.reading_time || 0"></span>
+                                                {{if eq .wiki.Settings.Language "zh"}}分钟阅读{{else}}min read{{end}}
+                                            </span>
+                                            <span class="flex items-center">
+                                                <i class="fas fa-file-word mr-2 text-green-500"></i>
+                                                <span x-text="page.word_count || 0"></span>
+                                                {{if eq .wiki.Settings.Language "zh"}}字{{else}}words{{end}}
+                                            </span>
+                                            <span class="flex items-center" x-show="page.type">
+                                                <i class="fas fa-tag mr-2 text-purple-500"></i>
+                                                <span x-text="page.type" class="capitalize"></span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Page Actions -->
+                                    <div class="flex items-center space-x-2 no-print">
+                                        <button @click="copyPageLink(page.id)"
+                                                class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                title="{{if eq .wiki.Settings.Language "zh"}}复制页面链接{{else}}Copy page link{{end}}">
+                                            <i class="fas fa-link"></i>
+                                        </button>
+                                        <button @click="printPage()"
+                                                class="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                title="{{if eq .wiki.Settings.Language "zh"}}打印页面{{else}}Print page{{end}}">
+                                            <i class="fas fa-print"></i>
+                                        </button>
+                                        <button @click="toggleTableOfContents()"
+                                                class="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                title="{{if eq .wiki.Settings.Language "zh"}}目录{{else}}Table of Contents{{end}}">
+                                            <i class="fas fa-list"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="w-full bg-gray-200 rounded-full h-1 mb-6">
+                                    <div class="bg-blue-600 h-1 rounded-full transition-all duration-300"
+                                         :style="`width: ${scrollProgress}%`"></div>
+                                </div>
+                            </div>
+
+                            <!-- Table of Contents -->
+                            <div x-show="showTableOfContents && pageTableOfContents.length > 0"
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 transform -translate-y-4"
+                                 x-transition:enter-end="opacity-100 transform translate-y-0"
+                                 class="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+                                <h3 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                                    <i class="fas fa-list mr-3 text-blue-600"></i>
+                                    {{if eq .wiki.Settings.Language "zh"}}目录{{else}}Table of Contents{{end}}
+                                </h3>
+                                <ul class="space-y-2">
+                                    <template x-for="(heading, index) in pageTableOfContents" :key="`toc-${index}`">
+                                        <li :class="`ml-${(heading.level - 1) * 4}`">
+                                            <a :href="`#${heading.id}`"
+                                               @click="scrollToHeading(heading.id)"
+                                               class="inline-flex items-center text-blue-700 hover:text-blue-900 hover:bg-blue-100 px-2 py-1 rounded transition-colors"
+                                               x-text="heading.text">
+                                            </a>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
+
+                            <!-- Page Content -->
+                            <article class="prose prose-lg max-w-none prose-headings:text-gray-900 prose-headings:font-bold prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-strong:text-gray-900 prose-code:text-pink-600 prose-code:bg-pink-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-50 prose-pre:border prose-blockquote:border-l-blue-500 prose-blockquote:bg-blue-50"
+                                     x-html="renderMarkdown(page.content)"></article>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Diagram Content -->
+                <div x-show="view === 'diagram'" class="max-w-4xl">
+                    <template x-for="(diagram, diagramIndex) in diagrams" :key="`diagram-${diagram.id || diagramIndex}`">
+                        <div x-show="currentDiagram === diagram.id">
+                            <div class="mb-6">
+                                <h1 class="text-3xl font-bold text-gray-900 mb-2" x-text="diagram.title"></h1>
+                                <p class="text-gray-600" x-text="diagram.description"></p>
+                            </div>
+                            <div class="bg-white p-6 rounded-lg shadow-sm">
+                                <div class="mermaid text-center overflow-x-auto" x-text="diagram.content"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </main>
+
+            <!-- Chat Panel -->
+            <div x-show="showChat"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="transform translate-y-full"
+                 x-transition:enter-end="transform translate-y-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="transform translate-y-0"
+                 x-transition:leave-end="transform translate-y-full"
+                 class="bg-white border-t shadow-lg">
+                <div class="p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold text-gray-900">
+                            <i class="fas fa-comments mr-2"></i>Ask about this wiki
+                        </h3>
+                        <button @click="showChat = false" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="flex space-x-2">
+                        <input type="text" 
+                               x-model="chatMessage"
+                               @keyup.enter="sendMessage()"
+                               placeholder="Ask a question about the code..."
+                               class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <button @click="sendMessage()" 
+                                :disabled="!chatMessage.trim() || isLoading"
+                                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors">
+                            <i class="fas" :class="isLoading ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
+                        </button>
+                    </div>
+                    
+                    <div x-show="chatResponse" class="mt-4 p-4 bg-gray-50 rounded-lg">
+                        <div class="prose prose-sm max-w-none" x-html="renderMarkdown(chatResponse)"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div x-show="showSearch === true"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click.self="showSearch = false"
+         @keydown.escape.window="showSearch = false"
+         class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+         style="display: none;"
+         x-cloak>
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-96">
+            <div class="p-4 border-b">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-search text-gray-400"></i>
+                    <input type="text" 
+                           x-model="searchQuery"
+                           @input="performSearch()"
+                           placeholder="Search in wiki..."
+                           class="flex-1 outline-none text-lg">
+                    <button @click="showSearch = false" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="max-h-64 overflow-y-auto">
+                <template x-for="(result, resultIndex) in searchResults" :key="`search-${result.id || resultIndex}`">
+                    <div class="p-4 border-b hover:bg-gray-50 cursor-pointer"
+                         @click="goToResult(result)">
+                        <h4 class="font-semibold text-gray-900" x-text="result.title"></h4>
+                        <p class="text-sm text-gray-600 mt-1" x-text="result.excerpt"></p>
+                        <span class="text-xs text-blue-600" x-text="result.type"></span>
+                    </div>
+                </template>
+                <div x-show="searchQuery && searchResults.length === 0" class="p-4 text-center text-gray-500">
+                    No results found
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function wikiViewer() {
+            return {
+                // View state
+                view: 'page',
+                currentPage: '{{if .wiki.Pages}}{{(index .wiki.Pages 0).ID}}{{end}}',
+                currentDiagram: '',
+
+                // UI state
+                sidebarOpen: false,
+                showChat: false,
+                showSearch: false,
+                showExportMenu: false,
+                showTableOfContents: true,
+
+                // Chat state
+                chatMessage: '',
+                chatResponse: '',
+                isLoading: false,
+
+                // Search state
+                searchQuery: '',
+                searchResults: [],
+
+                // Content state
+                pageTableOfContents: [],
+                scrollProgress: 0,
+
+                // Data
+                pages: {{.wiki.Pages | jsonRaw}},
+                diagrams: {{.wiki.Diagrams | jsonRaw}},
+
+                init() {
+                    // Initialize UI state
+                    this.showChat = false;
+                    this.showSearch = false;
+                    this.showExportMenu = false;
+                    this.sidebarOpen = window.innerWidth >= 768; // Open on desktop by default
+
+                    // Initialize Mermaid with better error handling
+                    try {
+                        mermaid.initialize({
+                            startOnLoad: false,
+                            theme: 'default',
+                            securityLevel: 'loose',
+                            logLevel: 'error',
+                            flowchart: {
+                                useMaxWidth: true,
+                                htmlLabels: true
+                            },
+                            sequence: {
+                                useMaxWidth: true
+                            },
+                            gantt: {
+                                useMaxWidth: true
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Mermaid initialization failed:', error);
+                    }
+
+                    // Show first page by default
+                    if (this.pages.length > 0) {
+                        this.showPage(this.pages[0].id);
+                    }
+
+                    // Setup scroll listener for progress bar
+                    this.setupScrollListener();
+
+                    // Setup responsive behavior
+                    window.addEventListener('resize', () => {
+                        if (window.innerWidth >= 768) {
+                            this.sidebarOpen = true;
+                        } else {
+                            this.sidebarOpen = false;
+                        }
+                    });
+
+                    console.log('Wiki viewer initialized:', {
+                        pages: this.pages.length,
+                        diagrams: this.diagrams.length,
+                        language: '{{.wiki.Settings.Language}}'
+                    });
+                },
+
+                // New methods
+                getCurrentPageTitle() {
+                    const page = this.pages.find(p => p.id === this.currentPage);
+                    return page ? page.title : '';
+                },
+
+                setupScrollListener() {
+                    const main = document.querySelector('main');
+                    if (main) {
+                        main.addEventListener('scroll', () => {
+                            const scrollTop = main.scrollTop;
+                            const scrollHeight = main.scrollHeight - main.clientHeight;
+                            this.scrollProgress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+                        });
+                    }
+                },
+
+                toggleTableOfContents() {
+                    this.showTableOfContents = !this.showTableOfContents;
+                },
+
+                copyWikiLink() {
+                    const url = window.location.href;
+                    navigator.clipboard.writeText(url).then(() => {
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}Wiki链接已复制到剪贴板！{{else}}Wiki link copied to clipboard!{{end}}');
+                    }).catch(() => {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        this.showNotification('{{if eq .wiki.Settings.Language "zh"}}Wiki链接已复制到剪贴板！{{else}}Wiki link copied to clipboard!{{end}}');
+                    });
+                },
+
+                showPage(pageId) {
+                    this.view = 'page';
+                    this.currentPage = pageId;
+                    this.currentDiagram = '';
+                    this.$nextTick(() => {
+                        this.renderMermaidDiagrams();
+                        this.generateTableOfContents();
+                    });
+                },
+
+                showDiagram(diagramId) {
+                    this.view = 'diagram';
+                    this.currentDiagram = diagramId;
+                    this.currentPage = '';
+                    this.$nextTick(() => {
+                        this.renderMermaidDiagrams();
+                    });
+                },
+
+                async renderMermaidDiagrams() {
+                    try {
+                        const mermaidElements = document.querySelectorAll('.mermaid');
+                        for (let element of mermaidElements) {
+                            if (element.getAttribute('data-processed') !== 'true') {
+                                const graphDefinition = element.textContent;
+                                if (graphDefinition && graphDefinition.trim()) {
+                                    const { svg } = await mermaid.render(`mermaid-${Date.now()}-${Math.random()}`, graphDefinition);
+                                    element.innerHTML = svg;
+                                    element.setAttribute('data-processed', 'true');
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Mermaid rendering failed:', error);
+                        // Show error message in diagram containers
+                        const mermaidElements = document.querySelectorAll('.mermaid');
+                        mermaidElements.forEach(element => {
+                            if (element.getAttribute('data-processed') !== 'true') {
+                                element.innerHTML = '<div class="text-red-500 p-4 border border-red-300 rounded">Failed to render diagram</div>';
+                                element.setAttribute('data-processed', 'true');
+                            }
+                        });
+                    }
+                },
+
+                renderMarkdown(content) {
+                    return marked.parse(content || '');
+                },
+
+                copyPageLink(pageId) {
+                    const url = `${window.location.origin}/wiki/${this.wikiId}/page/${pageId}`;
+                    navigator.clipboard.writeText(url).then(() => {
+                        this.showNotification('Page link copied to clipboard!');
+                    }).catch(() => {
+                        // Fallback for older browsers
+                        const textArea = document.createElement('textarea');
+                        textArea.value = url;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        this.showNotification('Page link copied to clipboard!');
+                    });
+                },
+
+                printPage() {
+                    window.print();
+                },
+
+                showNotification(message) {
+                    // Simple notification - you could enhance this with a proper notification system
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                    notification.textContent = message;
+                    document.body.appendChild(notification);
+
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 3000);
+                },
+
+                async sendMessage() {
+                    if (!this.chatMessage.trim()) return;
+                    
+                    this.isLoading = true;
+                    try {
+                        const response = await fetch(`/api/wiki/{{.wiki.ID}}/chat`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                message: this.chatMessage
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        if (response.ok) {
+                            this.chatResponse = result.content;
+                        } else {
+                            this.chatResponse = 'Error: ' + result.error;
+                        }
+                    } catch (error) {
+                        this.chatResponse = 'Error: ' + error.message;
+                    } finally {
+                        this.isLoading = false;
+                        this.chatMessage = '';
+                    }
+                },
+
+                async performSearch() {
+                    if (!this.searchQuery.trim()) {
+                        this.searchResults = [];
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`/api/wiki/{{.wiki.ID}}/search?q=${encodeURIComponent(this.searchQuery)}`);
+                        const results = await response.json();
+                        this.searchResults = results || [];
+                    } catch (error) {
+                        console.error('Search error:', error);
+                        this.searchResults = [];
+                    }
+                },
+
+                goToResult(result) {
+                    this.showSearch = false;
+                    this.searchQuery = '';
+
+                    if (result.type === 'page') {
+                        this.showPage(result.page_id || result.id);
+                        // Scroll to highlighted content after a short delay
+                        setTimeout(() => {
+                            this.highlightSearchTerm(this.searchQuery);
+                        }, 100);
+                    } else if (result.type === 'diagram') {
+                        this.showDiagram(result.diagram_id || result.id);
+                    }
+                },
+
+                highlightSearchTerm(term) {
+                    if (!term) return;
+
+                    // Remove previous highlights
+                    const existingHighlights = document.querySelectorAll('.search-highlight');
+                    existingHighlights.forEach(el => {
+                        const parent = el.parentNode;
+                        parent.replaceChild(document.createTextNode(el.textContent), el);
+                        parent.normalize();
+                    });
+
+                    // Add new highlights to prose content
+                    const proseElement = document.querySelector('.prose');
+                    if (proseElement) {
+                        const walker = document.createTreeWalker(
+                            proseElement,
+                            NodeFilter.SHOW_TEXT,
+                            null,
+                            false
+                        );
+
+                        const textNodes = [];
+                        let node;
+                        while (node = walker.nextNode()) {
+                            textNodes.push(node);
+                        }
+
+                        textNodes.forEach(textNode => {
+                            const text = textNode.textContent;
+                            const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                            if (regex.test(text)) {
+                                const highlightedHTML = text.replace(regex, '<span class="search-highlight">$1</span>');
+                                const wrapper = document.createElement('div');
+                                wrapper.innerHTML = highlightedHTML;
+                                const parent = textNode.parentNode;
+                                while (wrapper.firstChild) {
+                                    parent.insertBefore(wrapper.firstChild, textNode);
+                                }
+                                parent.removeChild(textNode);
+                            }
+                        });
+                    }
+                },
+
+                generateTableOfContents() {
+                    this.pageTableOfContents = [];
+                    const proseElement = document.querySelector('.prose');
+                    if (!proseElement) return;
+
+                    const headings = proseElement.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    headings.forEach((heading, index) => {
+                        const level = parseInt(heading.tagName.charAt(1));
+                        const text = heading.textContent.trim();
+                        const id = `heading-${index}`;
+
+                        // Add ID to heading for linking
+                        heading.id = id;
+
+                        this.pageTableOfContents.push({
+                            id: id,
+                            text: text,
+                            level: level
+                        });
+                    });
+                },
+
+                scrollToHeading(headingId) {
+                    const element = document.getElementById(headingId);
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Chat Toggle Button -->
+    {{if .wiki.Settings.EnableRAG}}
+    <button @click="showChat = !showChat" 
+            class="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition-colors z-40">
+        <i class="fas fa-comments text-xl"></i>
+    </button>
+    {{end}}
+</body>
+</html>

@@ -1,0 +1,126 @@
+# KWiki Prompt Templates Configuration
+
+# Template Configuration
+templates:
+  # Available template types
+  types:
+    - readme
+    - getting-started
+    - installation
+    - architecture
+    - api-reference
+    - api-overview
+    - examples
+    - configuration
+    - troubleshooting
+    - contributing
+    - changelog
+
+  # Supported languages
+  languages:
+    en: English
+    zh: 中文
+    ja: 日本語
+    ko: 한국어
+    es: Español
+    fr: Français
+    de: Deutsch
+    ru: Русский
+    pt: Português
+    it: Italiano
+
+  # Default settings
+  defaults:
+    language: en
+    fallback_language: en
+    max_modules_per_template: 10
+    max_functions_per_module: 10
+
+# Template Variables
+# These variables are available in all templates:
+variables:
+  # Project Information
+  - name: ProjectName
+    description: "Repository name"
+    type: string
+    
+  - name: Description
+    description: "Repository description"
+    type: string
+    
+  - name: PrimaryLanguage
+    description: "Primary programming language"
+    type: string
+    
+  - name: License
+    description: "License information"
+    type: string
+    
+  - name: Language
+    description: "Target documentation language (en/zh/ja/etc.)"
+    type: string
+    
+  # Structure Information
+  - name: Modules
+    description: "Array of modules with .Name and .Description"
+    type: array
+    fields:
+      - name: Name
+        type: string
+      - name: Description
+        type: string
+      - name: Functions
+        type: array
+        fields:
+          - name: Name
+            type: string
+          - name: Description
+            type: string
+
+# Template Customization Guide
+customization:
+  # How to customize templates
+  instructions: |
+    1. Copy the template file you want to customize from templates/prompts/{language}/{type}.md
+    2. Edit the template using standard Go template syntax
+    3. Available variables are listed above
+    4. Use {{.VariableName}} to insert variables
+    5. Use {{range .Modules}} ... {{end}} for loops
+    6. Use {{if condition}} ... {{end}} for conditionals
+    
+  # Template syntax examples
+  examples:
+    basic_variable: "{{.ProjectName}}"
+    conditional: "{{if .License}}License: {{.License}}{{end}}"
+    loop: |
+      {{range .Modules}}
+      - {{.Name}}: {{.Description}}
+      {{end}}
+    nested_loop: |
+      {{range .Modules}}
+      ## {{.Name}}
+      {{range .Functions}}
+      - {{.Name}}: {{.Description}}
+      {{end}}
+      {{end}}
+
+# Quality Guidelines
+quality:
+  # Guidelines for creating good prompts
+  guidelines:
+    - "Be specific about the desired output format"
+    - "Include clear structure requirements"
+    - "Provide context about the target audience"
+    - "Specify language and tone requirements"
+    - "Include examples of desired output"
+    - "Be clear about technical depth required"
+    - "Specify any constraints or limitations"
+    
+  # Best practices
+  best_practices:
+    - "Use consistent formatting across languages"
+    - "Maintain cultural sensitivity in translations"
+    - "Include relevant technical terminology"
+    - "Provide clear section headings"
+    - "Include practical examples"
+    - "Specify code formatting requirements"

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div x-data="wikiApp()"
+         data-providers="{{.providers | json}}"
+         data-models="{{.models | json}}"
+         class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-book-open text-blue-600 mr-3"></i>
+                KWiki
+            </h1>
+            <p class="text-xl text-gray-600 mb-2">AI-Powered Wiki Generator for Code Repositories</p>
+            <p class="text-gray-500">Transform any GitHub, GitLab, or Bitbucket repository into beautiful, interactive documentation</p>
+        </div>
+
+        <!-- Main Form -->
+        <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8">
+            <form @submit.prevent="generateWiki()" class="space-y-6">
+                <!-- Repository URL -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fab fa-github mr-2"></i>Repository URL
+                    </label>
+                    <input 
+                        type="url" 
+                        x-model="form.repository_url"
+                        placeholder="https://github.com/owner/repo or https://gitlab.com/owner/repo"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                    >
+                    <p class="text-sm text-gray-500 mt-1">Supports GitHub, GitLab, and Bitbucket repositories</p>
+                </div>
+
+                <!-- Access Token (Optional) -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-key mr-2"></i>Access Token (Optional)
+                    </label>
+                    <input 
+                        type="password" 
+                        x-model="form.access_token"
+                        placeholder="For private repositories"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                    <p class="text-sm text-gray-500 mt-1">Required for private repositories</p>
+                </div>
+
+                <!-- AI Provider Selection -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-robot mr-2"></i>AI Provider
+                        </label>
+                        <select
+                            x-model="form.settings.ai_provider"
+                            @change="updateModels()"
+                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                            <option value="">请选择 AI Provider</option>
+                            <template x-for="[name, provider] in Object.entries(providers)" :key="name">
+                                <option :value="name" x-text="name.charAt(0).toUpperCase() + name.slice(1)"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <i class="fas fa-brain mr-2"></i>Model
+                        </label>
+                        <div class="relative">
+                            <select
+                                x-model="form.settings.model"
+                                @change="validateProviderModelMatch()"
+                                :disabled="loadingModels"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                            >
+                                <option value="" x-text="loadingModels ? '正在获取模型列表...' : (form.settings.ai_provider ? '请选择模型' : '请先选择 AI Provider')"></option>
+                                <template x-for="model in availableModels" :key="model">
+                                    <option :value="model" x-text="model"></option>
+                                </template>
+                            </select>
+                            <div x-show="loadingModels" class="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                <i class="fas fa-spinner fa-spin text-blue-500"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div x-show="showAdvanced" x-transition class="space-y-4 border-t pt-6">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Temperature</label>
+                            <input 
+                                type="range" 
+                                x-model="form.settings.temperature"
+                                min="0" 
+                                max="1" 
+                                step="0.1"
+                                class="w-full"
+                            >
+                            <span class="text-sm text-gray-500" x-text="form.settings.temperature"></span>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Max Tokens</label>
+                            <input 
+                                type="number" 
+                                x-model="form.settings.max_tokens"
+                                min="100" 
+                                max="8000"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Primary Language</label>
+                            <select
+                                x-model="form.primaryLanguage"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                            >
+                                <option value="en">English</option>
+                                <option value="zh">中文</option>
+                                <option value="ja">日本語</option>
+                                <option value="ko">한국어</option>
+                                <option value="es">Español</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                                <option value="ru">Русский</option>
+                                <option value="pt">Português</option>
+                                <option value="it">Italiano</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Additional Languages</label>
+                            <div class="space-y-2">
+                                <div class="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        x-model="form.generateAllLangs"
+                                        id="generateAllLangs"
+                                        class="mr-2"
+                                    >
+                                    <label for="generateAllLangs" class="text-sm text-gray-600">Generate all supported languages</label>
+                                </div>
+
+                                <div x-show="!form.generateAllLangs" class="grid grid-cols-2 gap-2">
+                                    <template x-for="(lang, code) in supportedLanguages" :key="code">
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                :id="`lang-${code}`"
+                                                :value="code"
+                                                x-model="form.languages"
+                                                :disabled="code === form.primaryLanguage"
+                                                class="mr-2"
+                                            >
+                                            <label :for="`lang-${code}`" class="text-sm text-gray-600" x-text="lang"></label>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Feature Toggles -->
+                    <div class="flex flex-wrap gap-6">
+                        <label class="flex items-center">
+                            <input 
+                                type="checkbox" 
+                                x-model="form.settings.enable_diagrams"
+                                class="mr-2 rounded"
+                            >
+                            <span class="text-sm text-gray-700">Generate Diagrams</span>
+                        </label>
+
+                        <label class="flex items-center">
+                            <input 
+                                type="checkbox" 
+                                x-model="form.settings.enable_rag"
+                                class="mr-2 rounded"
+                            >
+                            <span class="text-sm text-gray-700">Enable Q&A Chat</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Toggle Advanced Settings -->
+                <div class="text-center">
+                    <button 
+                        type="button"
+                        @click="showAdvanced = !showAdvanced"
+                        class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                        <i class="fas" :class="showAdvanced ? 'fa-chevron-up' : 'fa-chevron-down'" class="mr-1"></i>
+                        <span x-text="showAdvanced ? 'Hide Advanced Settings' : 'Show Advanced Settings'"></span>
+                    </button>
+                </div>
+
+                <!-- Generate Button -->
+                <div class="text-center">
+                    <button
+                        type="submit"
+                        :disabled="isGenerating || !form.repository_url || !form.settings.ai_provider || !form.settings.model"
+                        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-bold py-4 px-8 rounded-lg text-lg transition-colors duration-200"
+                    >
+                        <i class="fas" :class="isGenerating ? 'fa-spinner fa-spin' : 'fa-magic'" class="mr-2"></i>
+                        <span x-text="isGenerating ? 'Generating Wiki...' : 'Generate Wiki'"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Progress Section -->
+        <div x-show="currentWiki" x-transition class="max-w-4xl mx-auto mt-8 bg-white rounded-lg shadow-lg p-8">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6">
+                <i class="fas fa-cogs mr-2"></i>Generation Progress
+            </h2>
+            
+            <!-- Progress Bar -->
+            <div class="mb-6">
+                <div class="flex justify-between text-sm text-gray-600 mb-2">
+                    <span x-text="progress.currentStep || 'Initializing...'"></span>
+                    <span x-text="progress.progress + '%'"></span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3">
+                    <div 
+                        class="bg-blue-600 h-3 rounded-full transition-all duration-300"
+                        :style="`width: ${progress.progress}%`"
+                    ></div>
+                </div>
+            </div>
+
+            <!-- Status Message -->
+            <div x-show="progress.message" class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p class="text-blue-800" x-text="progress.message"></p>
+            </div>
+
+            <!-- Error Message -->
+            <div x-show="progress.error" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p class="text-red-800" x-text="progress.error"></p>
+            </div>
+
+            <!-- View Wiki Button -->
+            <div x-show="progress.status === 'completed'" class="text-center">
+                <a
+                    :href="getWikiURL(wikis.find(w => w.id === currentWiki))"
+                    class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg inline-block transition-colors duration-200"
+                >
+                    <i class="fas fa-eye mr-2"></i>View Generated Wiki
+                </a>
+            </div>
+        </div>
+
+        <!-- Recent Wikis -->
+        <div x-show="recentWikis.length > 0" class="max-w-4xl mx-auto mt-8 bg-white rounded-lg shadow-lg p-8">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-900">
+                    <i class="fas fa-history mr-2"></i>Recent Wikis
+                </h2>
+
+                <!-- Tag Filter -->
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <select x-model="selectedTag"
+                                @change="filterWikisByTag()"
+                                class="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">All Tags</option>
+                            <template x-for="tag in allTags" :key="tag.name">
+                                <option :value="tag.name" x-text="`${tag.name} (${tag.count})`"></option>
+                            </template>
+                        </select>
+                        <i class="fas fa-chevron-down absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                    </div>
+                    <button @click="loadRecentWikis()"
+                            class="text-blue-600 hover:text-blue-800 transition-colors text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="wiki in recentWikis" :key="wiki.id">
+                    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <h3 class="font-semibold text-gray-900 mb-2" x-text="wiki.title"></h3>
+                        <p class="text-sm text-gray-600 mb-3" x-text="wiki.description"></p>
+
+                        <!-- Status Badge -->
+                        <div class="mb-3">
+                            <span
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                :class="{
+                                    'bg-yellow-100 text-yellow-800': wiki.status === 'pending',
+                                    'bg-blue-100 text-blue-800': wiki.status === 'analyzing' || wiki.status === 'generating',
+                                    'bg-green-100 text-green-800': wiki.status === 'completed',
+                                    'bg-red-100 text-red-800': wiki.status === 'failed'
+                                }"
+                            >
+                                <i
+                                    class="mr-1"
+                                    :class="{
+                                        'fas fa-clock': wiki.status === 'pending',
+                                        'fas fa-spinner fa-spin': wiki.status === 'analyzing' || wiki.status === 'generating',
+                                        'fas fa-check': wiki.status === 'completed',
+                                        'fas fa-times': wiki.status === 'failed'
+                                    }"
+                                ></i>
+                                <span x-text="getStatusText(wiki.status)"></span>
+                            </span>
+                        </div>
+
+                        <!-- Tags -->
+                        <div x-show="wiki.tags && wiki.tags.length > 0" class="mb-3">
+                            <div class="flex flex-wrap gap-1">
+                                <template x-for="tag in (wiki.tags || []).slice(0, 3)" :key="tag">
+                                    <span class="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
+                                          x-text="tag"
+                                          @click="selectedTag = tag; filterWikisByTag()"
+                                          title="Filter by this tag"></span>
+                                </template>
+                                <span x-show="wiki.tags && wiki.tags.length > 3"
+                                      class="inline-block bg-gray-100 text-gray-500 text-xs px-2 py-1 rounded-full"
+                                      x-text="`+${wiki.tags.length - 3} more`"></span>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar (for in-progress wikis) -->
+                        <div x-show="wiki.status === 'analyzing' || wiki.status === 'generating'" class="mb-3">
+                            <div class="flex justify-between text-xs text-gray-600 mb-1">
+                                <span>Progress</span>
+                                <span x-text="`${wiki.progress}%`"></span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                    class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                    :style="`width: ${wiki.progress}%`"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <!-- Stats for completed wikis -->
+                        <div x-show="wiki.status === 'completed'" class="mb-3 text-xs text-gray-500">
+                            <div class="flex justify-between">
+                                <span><i class="fas fa-file-alt mr-1"></i><span x-text="wiki.pages?.length || 0"></span> pages</span>
+                                <span><i class="fas fa-code mr-1"></i><span x-text="wiki.metadata?.files_processed || 0"></span> files</span>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="text-xs text-gray-500" x-text="formatDate(wiki.created_at)"></div>
+                                <div x-show="wiki.package_path" class="text-xs text-blue-600 mt-1" x-text="wiki.package_path"></div>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <a
+                                    x-show="wiki.status === 'completed'"
+                                    :href="getWikiURL(wiki)"
+                                    class="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                >
+                                    <i class="fas fa-eye mr-1"></i>View
+                                </a>
+                                <button
+                                    x-show="wiki.status === 'analyzing' || wiki.status === 'generating'"
+                                    @click="watchWiki(wiki.id)"
+                                    class="text-green-600 hover:text-green-800 text-sm font-medium"
+                                >
+                                    <i class="fas fa-eye mr-1"></i>Watch
+                                </button>
+                                <button
+                                    x-show="wiki.status !== 'pending'"
+                                    @click="showLogs(wiki.id)"
+                                    class="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                                >
+                                    <i class="fas fa-file-alt mr-1"></i>Logs
+                                </button>
+                                <button
+                                    x-show="wiki.status === 'completed' || wiki.status === 'failed'"
+                                    @click="confirmRebuildWiki(wiki)"
+                                    class="text-orange-600 hover:text-orange-800 text-sm font-medium"
+                                    :disabled="isRebuilding === wiki.id"
+                                >
+                                    <i class="fas" :class="isRebuilding === wiki.id ? 'fa-spinner fa-spin' : 'fa-redo'" class="mr-1"></i>
+                                    <span x-text="isRebuilding === wiki.id ? 'Rebuilding...' : 'Rebuild'"></span>
+                                </button>
+                                <button
+                                    @click="confirmDeleteWiki(wiki)"
+                                    class="text-red-600 hover:text-red-800 text-sm font-medium"
+                                    :disabled="isDeleting === wiki.id"
+                                >
+                                    <i class="fas" :class="isDeleting === wiki.id ? 'fa-spinner fa-spin' : 'fa-trash'" class="mr-1"></i>
+                                    <span x-text="isDeleting === wiki.id ? 'Deleting...' : 'Delete'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Logs Modal -->
+        <div x-show="showLogsModal"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+             @click.self="showLogsModal = false">
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            <i class="fas fa-file-alt mr-2"></i>Generation Logs
+                        </h3>
+                        <button @click="showLogsModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
+                        <template x-for="log in currentLogs" :key="log">
+                            <div class="mb-1" x-text="log"></div>
+                        </template>
+                        <div x-show="currentLogs.length === 0" class="text-gray-500">
+                            No logs available yet...
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end mt-4 space-x-2">
+                        <button @click="refreshLogs()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                            <i class="fas fa-sync-alt mr-2"></i>Refresh
+                        </button>
+                        <button @click="showLogsModal = false" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Confirmation Modal -->
+        <div x-show="showDeleteModal"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+             @click.self="showDeleteModal = false">
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex items-center mb-4">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                            <i class="fas fa-exclamation-triangle text-red-600"></i>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">Delete Wiki</h3>
+                        <p class="text-sm text-gray-500 mb-4">
+                            Are you sure you want to delete "<span x-text="wikiToDelete?.title"></span>"?
+                            This action cannot be undone and will permanently remove all generated documentation.
+                        </p>
+
+                        <div x-show="wikiToDelete?.package_path" class="mb-4 p-3 bg-gray-50 rounded-lg">
+                            <p class="text-xs text-gray-600">Package Path:</p>
+                            <p class="text-sm font-mono text-gray-800" x-text="wikiToDelete?.package_path"></p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center space-x-4 mt-6">
+                        <button
+                            @click="showDeleteModal = false"
+                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            @click="deleteWiki(wikiToDelete)"
+                            class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+                            :disabled="isDeleting"
+                        >
+                            <i class="fas" :class="isDeleting ? 'fa-spinner fa-spin' : 'fa-trash'" class="mr-2"></i>
+                            <span x-text="isDeleting ? 'Deleting...' : 'Delete Wiki'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rebuild Confirmation Modal -->
+        <div x-show="showRebuildModal"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+             @click.self="showRebuildModal = false">
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex items-center mb-4">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-orange-100">
+                            <i class="fas fa-redo text-orange-600"></i>
+                        </div>
+                    </div>
+
+                    <div class="text-center">
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">Rebuild Wiki</h3>
+                        <p class="text-sm text-gray-500 mb-4">
+                            Are you sure you want to rebuild "<span x-text="wikiToRebuild?.title"></span>"?
+                            This will regenerate all documentation using the latest repository content and may take several minutes.
+                        </p>
+
+                        <div x-show="wikiToRebuild?.package_path" class="mb-4 p-3 bg-gray-50 rounded-lg">
+                            <p class="text-xs text-gray-600">Package Path:</p>
+                            <p class="text-sm font-mono text-gray-800" x-text="wikiToRebuild?.package_path"></p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center space-x-4 mt-6">
+                        <button
+                            @click="showRebuildModal = false"
+                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            @click="executeRebuildWiki(wikiToRebuild)"
+                            class="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded"
+                            :disabled="isRebuilding"
+                        >
+                            <i class="fas" :class="isRebuilding ? 'fa-spinner fa-spin' : 'fa-redo'" class="mr-2"></i>
+                            <span x-text="isRebuilding ? 'Rebuilding...' : 'Rebuild Wiki'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function wikiApp() {
+            // Get data from HTML data attributes
+            const container = document.querySelector('[x-data="wikiApp()"]');
+            const providersData = JSON.parse(container.dataset.providers);
+            const modelsData = JSON.parse(container.dataset.models);
+
+            return {
+                form: {
+                    repository_url: '',
+                    access_token: '',
+                    primaryLanguage: 'en',
+                    languages: [],
+                    generateAllLangs: false,
+                    settings: {
+                        ai_provider: '',
+                        model: '',
+                        temperature: 0.7,
+                        max_tokens: 4000,
+                        language: 'en',
+                        enable_diagrams: true,
+                        enable_rag: true
+                    }
+                },
+                supportedLanguages: {
+                    'en': 'English',
+                    'zh': '中文',
+                    'ja': '日本語',
+                    'ko': '한국어',
+                    'es': 'Español',
+                    'fr': 'Français',
+                    'de': 'Deutsch',
+                    'ru': 'Русский',
+                    'pt': 'Português',
+                    'it': 'Italiano'
+                },
+                providers: providersData,
+                models: modelsData,
+                availableModels: [],
+                loadingModels: false,
+                showAdvanced: false,
+                isGenerating: false,
+                currentWiki: null,
+                progress: {
+                    status: '',
+                    progress: 0,
+                    currentStep: '',
+                    message: '',
+                    error: ''
+                },
+                recentWikis: [],
+                allTags: [],
+                selectedTag: '',
+                ws: null,
+                showLogsModal: false,
+                currentLogs: [],
+                currentLogsWikiId: null,
+                showDeleteModal: false,
+                wikiToDelete: null,
+                isDeleting: false,
+                showRebuildModal: false,
+                wikiToRebuild: null,
+                isRebuilding: null,
+
+                async init() {
+                    // 初始化时获取最新的模型列表
+                    await this.refreshModels();
+                    this.loadRecentWikis();
+                    this.loadTags();
+
+                    // Auto-refresh recent wikis every 10 seconds
+                    setInterval(() => {
+                        this.loadRecentWikis();
+                        this.loadTags();
+                    }, 10000);
+                },
+
+                // 刷新模型列表（无条件获取最新数据）
+                async refreshModels() {
+                    try {
+                        const response = await fetch('/api/models');
+                        if (response.ok) {
+                            const latestModels = await response.json();
+                            // 更新本地模型数据
+                            this.models = latestModels;
+                            console.log('已刷新模型列表:', this.models);
+                        } else {
+                            console.warn('Failed to refresh models');
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing models:', error);
+                    }
+                },
+
+                async updateModels() {
+                    const provider = this.form.settings.ai_provider;
+
+                    if (!provider) {
+                        this.availableModels = [];
+                        this.form.settings.model = '';
+                        this.loadingModels = false;
+                        return;
+                    }
+
+                    this.loadingModels = true;
+
+                    try {
+                        // 动态获取最新的模型列表
+                        const response = await fetch('/api/models');
+                        if (response.ok) {
+                            const latestModels = await response.json();
+                            // 更新本地模型数据
+                            this.models = latestModels;
+                            // 设置当前提供商的可用模型
+                            this.availableModels = this.models[provider] || [];
+                            console.log(`已获取 ${provider} 的模型列表:`, this.availableModels);
+                        } else {
+                            // 如果API调用失败，使用本地缓存的模型数据
+                            console.warn('Failed to fetch latest models, using cached data');
+                            this.availableModels = this.models[provider] || [];
+                        }
+                    } catch (error) {
+                        console.error('Error fetching models:', error);
+                        // 如果出错，使用本地缓存的模型数据
+                        this.availableModels = this.models[provider] || [];
+                    } finally {
+                        this.loadingModels = false;
+                    }
+
+                    // 清空当前选择的模型，让用户手动选择
+                    this.form.settings.model = '';
+                },
+
+                // 根据模型名称自动选择正确的提供商
+                getProviderForModel(modelName) {
+                    for (const [providerName, models] of Object.entries(this.models)) {
+                        if (models.includes(modelName)) {
+                            return providerName;
+                        }
+                    }
+                    return null;
+                },
+
+                // 验证并修正提供商和模型的匹配
+                async validateProviderModelMatch() {
+                    const currentProvider = this.form.settings.ai_provider;
+                    const currentModel = this.form.settings.model;
+
+                    console.log('=== 验证提供商和模型匹配 ===');
+                    console.log('当前提供商:', currentProvider);
+                    console.log('当前模型:', currentModel);
+                    console.log('可用模型:', this.models);
+
+                    if (!currentModel) {
+                        console.log('模型为空，跳过验证');
+                        return;
+                    }
+
+                    // 检查当前模型是否属于当前提供商
+                    const providerModels = this.models[currentProvider] || [];
+                    console.log(`提供商 ${currentProvider} 的模型:`, providerModels);
+
+                    if (!providerModels.includes(currentModel)) {
+                        console.log(`模型 ${currentModel} 不属于提供商 ${currentProvider}`);
+                        // 自动选择正确的提供商
+                        const correctProvider = this.getProviderForModel(currentModel);
+                        console.log('查找到的正确提供商:', correctProvider);
+                        if (correctProvider) {
+                            console.log(`自动切换提供商: ${currentProvider} -> ${correctProvider} (模型: ${currentModel})`);
+                            this.form.settings.ai_provider = correctProvider;
+                            await this.updateModels();
+                        } else {
+                            console.log('未找到匹配的提供商');
+                        }
+                    } else {
+                        console.log(`模型 ${currentModel} 属于提供商 ${currentProvider}，无需切换`);
+                    }
+                },
+
+                async generateWiki() {
+                    this.isGenerating = true;
+                    this.progress = { status: 'pending', progress: 0, currentStep: 'Starting...', message: '', error: '' };
+
+                    try {
+                        // 验证并修正提供商和模型的匹配
+                        this.validateProviderModelMatch();
+
+                        // Debug: 打印表单数据
+                        console.log('=== 生成前的表单数据 ===');
+                        console.log('form.settings:', this.form.settings);
+                        console.log('ai_provider:', this.form.settings.ai_provider);
+                        console.log('model:', this.form.settings.model);
+
+                        // Prepare request data with multi-language support
+                        const requestData = {
+                            ...this.form,
+                            primary_language: this.form.primaryLanguage,
+                            languages: this.form.generateAllLangs ? Object.keys(this.supportedLanguages) :
+                                      [this.form.primaryLanguage, ...this.form.languages].filter((v, i, a) => a.indexOf(v) === i),
+                            generate_all_langs: this.form.generateAllLangs
+                        };
+
+                        console.log('=== 发送的请求数据 ===');
+                        console.log('requestData.settings:', requestData.settings);
+                        console.log('JSON.stringify(requestData):', JSON.stringify(requestData, null, 2));
+
+                        const response = await fetch('/api/wiki/generate', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestData)
+                        });
+
+                        const result = await response.json();
+                        
+                        if (response.ok) {
+                            this.currentWiki = result.wiki_id;
+                            this.connectWebSocket(result.wiki_id);
+                        } else {
+                            this.progress.error = result.error || 'Failed to start wiki generation';
+                            this.isGenerating = false;
+                        }
+                    } catch (error) {
+                        this.progress.error = 'Network error: ' + error.message;
+                        this.isGenerating = false;
+                    }
+                },
+
+                connectWebSocket(wikiId) {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const wsUrl = `${protocol}//${window.location.host}/ws/${wikiId}`;
+                    
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'progress') {
+                            this.progress = {
+                                status: data.status,
+                                progress: data.progress,
+                                currentStep: data.current_step,
+                                message: data.message,
+                                error: data.error
+                            };
+                            
+                            if (data.status === 'completed' || data.status === 'failed') {
+                                this.isGenerating = false;
+                                if (data.status === 'completed') {
+                                    this.loadRecentWikis();
+                                }
+                            }
+                        }
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.isGenerating = false;
+                    };
+                },
+
+                async loadRecentWikis() {
+                    try {
+                        const response = await fetch('/api/wikis');
+                        if (response.ok) {
+                            this.recentWikis = await response.json();
+                        }
+                    } catch (error) {
+                        console.error('Failed to load recent wikis:', error);
+                    }
+                },
+
+                async loadTags() {
+                    try {
+                        const response = await fetch('/api/tags');
+                        if (response.ok) {
+                            this.allTags = await response.json();
+                        }
+                    } catch (error) {
+                        console.error('Failed to load tags:', error);
+                    }
+                },
+
+                async filterWikisByTag() {
+                    try {
+                        let url = '/api/wikis';
+                        if (this.selectedTag) {
+                            url = `/api/wikis/by-tag/${encodeURIComponent(this.selectedTag)}`;
+                        }
+
+                        const response = await fetch(url);
+                        if (response.ok) {
+                            this.recentWikis = await response.json();
+                        }
+                    } catch (error) {
+                        console.error('Failed to filter wikis by tag:', error);
+                    }
+                },
+
+                getStatusText(status) {
+                    const statusMap = {
+                        'pending': 'Pending',
+                        'analyzing': 'Analyzing',
+                        'generating': 'Generating',
+                        'completed': 'Completed',
+                        'failed': 'Failed'
+                    };
+                    return statusMap[status] || status;
+                },
+
+                watchWiki(wikiId) {
+                    // Navigate to the wiki page to watch progress
+                    const wiki = this.wikis.find(w => w.id === wikiId);
+                    if (wiki) {
+                        window.location.href = this.getWikiURL(wiki);
+                    } else {
+                        window.location.href = `/wiki/${wikiId}`;
+                    }
+                },
+
+                async showLogs(wikiId) {
+                    this.currentLogsWikiId = wikiId;
+                    this.showLogsModal = true;
+                    await this.loadLogs(wikiId);
+                },
+
+                async loadLogs(wikiId) {
+                    try {
+                        // Use query parameter to avoid URL encoding issues with slashes
+                        const response = await fetch(`/api/wiki/logs?id=${encodeURIComponent(wikiId)}`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.currentLogs = data.logs || [];
+                        } else {
+                            this.currentLogs = ['Failed to load logs'];
+                        }
+                    } catch (error) {
+                        console.error('Failed to load logs:', error);
+                        this.currentLogs = ['Error loading logs: ' + error.message];
+                    }
+                },
+
+                async refreshLogs() {
+                    if (this.currentLogsWikiId) {
+                        await this.loadLogs(this.currentLogsWikiId);
+                    }
+                },
+
+                formatDate(dateString) {
+                    return new Date(dateString).toLocaleDateString();
+                },
+
+                getWikiURL(wiki) {
+                    // Use package path if available, otherwise fall back to ID
+                    if (wiki.package_path && wiki.package_path.trim() !== '') {
+                        return `/pkg/${wiki.package_path}`;
+                    }
+                    return `/wiki/${wiki.id}`;
+                },
+
+                confirmDeleteWiki(wiki) {
+                    this.wikiToDelete = wiki;
+                    this.showDeleteModal = true;
+                },
+
+                async deleteWiki(wiki) {
+                    if (!wiki) return;
+
+                    this.isDeleting = true;
+
+                    try {
+                        const encodedWikiId = encodeURIComponent(wiki.id);
+                        const response = await fetch(`/api/wiki/${encodedWikiId}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (response.ok) {
+                            // Remove from local list
+                            this.recentWikis = this.recentWikis.filter(w => w.id !== wiki.id);
+                            this.showDeleteModal = false;
+                            this.wikiToDelete = null;
+
+                            // Show success message
+                            this.showNotification('Wiki deleted successfully', 'success');
+
+                            // Refresh the list
+                            await this.loadRecentWikis();
+                            await this.loadTags();
+                        } else {
+                            const error = await response.json();
+                            this.showNotification(error.error || 'Failed to delete wiki', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Failed to delete wiki:', error);
+                        this.showNotification('Network error: ' + error.message, 'error');
+                    } finally {
+                        this.isDeleting = false;
+                    }
+                },
+
+                confirmRebuildWiki(wiki) {
+                    this.wikiToRebuild = wiki;
+                    this.showRebuildModal = true;
+                },
+
+                async executeRebuildWiki(wiki) {
+                    if (!wiki) return;
+
+                    this.showRebuildModal = false;
+                    this.wikiToRebuild = null;
+                    this.isRebuilding = wiki.id;
+
+                    try {
+                        // First, get the original wiki data to rebuild with same settings
+                        const encodedWikiId = encodeURIComponent(wiki.id);
+                        const wikiResponse = await fetch(`/api/wiki/${encodedWikiId}`);
+                        if (!wikiResponse.ok) {
+                            const errorText = await wikiResponse.text();
+                            throw new Error(`Failed to get wiki details (${wikiResponse.status}): ${errorText}`);
+                        }
+
+                        const wikiData = await wikiResponse.json();
+
+                        // Prepare rebuild request with original settings
+                        const rebuildData = {
+                            repository_url: wikiData.repository_id || wiki.package_path,
+                            title: wikiData.title,
+                            description: wikiData.description,
+                            primary_language: wikiData.primary_language || 'en',
+                            languages: wikiData.languages || ['en'],
+                            settings: wikiData.settings || {
+                                ai_provider: 'ollama',
+                                model: 'llama3.2:latest',
+                                temperature: 0.7,
+                                max_tokens: 4000,
+                                enable_diagrams: true,
+                                enable_rag: true
+                            }
+                        };
+
+                        const response = await fetch('/api/wiki/generate', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(rebuildData)
+                        });
+
+                        if (response.ok) {
+                            const result = await response.json();
+
+                            // Show success message
+                            this.showNotification('Wiki rebuild started successfully', 'success');
+
+                            // Start watching the new generation
+                            this.currentWiki = result.wiki_id;
+                            this.isGenerating = true;
+                            this.progress = { status: 'pending', progress: 0, currentStep: 'Starting rebuild...', message: '', error: '' };
+                            this.connectWebSocket(result.wiki_id);
+
+                            // Refresh the list
+                            await this.loadRecentWikis();
+                        } else {
+                            let errorMessage = 'Failed to rebuild wiki';
+                            try {
+                                const error = await response.json();
+                                errorMessage = error.error || errorMessage;
+                            } catch (e) {
+                                // If response is not JSON, use status text
+                                errorMessage = `Failed to rebuild wiki (${response.status}): ${response.statusText}`;
+                            }
+                            this.showNotification(errorMessage, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Failed to rebuild wiki:', error);
+                        let errorMessage = 'Network error: ' + error.message;
+
+                        // Provide more specific error messages
+                        if (error.message.includes('Failed to get wiki details')) {
+                            errorMessage = 'Unable to retrieve wiki information. The wiki may have been deleted or there may be a network issue.';
+                        } else if (error.message.includes('fetch')) {
+                            errorMessage = 'Network connection failed. Please check your internet connection and try again.';
+                        }
+
+                        this.showNotification(errorMessage, 'error');
+                    } finally {
+                        this.isRebuilding = null;
+                    }
+                },
+
+                showNotification(message, type = 'info') {
+                    // Create a simple notification system
+                    const notification = document.createElement('div');
+                    notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transition-all duration-300 ${
+                        type === 'success' ? 'bg-green-500 text-white' :
+                        type === 'error' ? 'bg-red-500 text-white' :
+                        'bg-blue-500 text-white'
+                    }`;
+
+                    notification.innerHTML = `
+                        <div class="flex items-center">
+                            <i class="fas ${
+                                type === 'success' ? 'fa-check-circle' :
+                                type === 'error' ? 'fa-exclamation-circle' :
+                                'fa-info-circle'
+                            } mr-2"></i>
+                            <span>${message}</span>
+                            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+
+                    document.body.appendChild(notification);
+
+                    // Auto remove after 5 seconds
+                    setTimeout(() => {
+                        if (notification.parentElement) {
+                            notification.remove();
+                        }
+                    }, 5000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

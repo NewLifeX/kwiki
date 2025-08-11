@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  kwiki:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # AI Provider API Keys (set these in your .env file)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      
+      # Git tokens for private repositories
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+      
+      # Server configuration
+      - PORT=8080
+      - HOST=0.0.0.0
+    volumes:
+      # Persist cloned repositories and generated wikis
+      - ./data/repos:/root/repos
+      - ./data/output:/root/output
+      # Mount config file for easy editing
+      - ./config.yaml:/root/config.yaml:ro
+    depends_on:
+      - ollama
+    networks:
+      - kwiki-network
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist Ollama models
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_ORIGINS=*
+    networks:
+      - kwiki-network
+    # Uncomment the following lines if you have NVIDIA GPU support
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # Optional: Ollama Web UI for model management
+  ollama-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=your-secret-key-here
+    volumes:
+      - ollama_webui_data:/app/backend/data
+    depends_on:
+      - ollama
+    networks:
+      - kwiki-network
+
+volumes:
+  ollama_data:
+  ollama_webui_data:
+
+networks:
+  kwiki-network:
+    driver: bridge

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - {{.title}}</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</head>
+<body>
+    <div x-data="debugApp()"
+         data-providers="{{.providers | json}}"
+         data-models="{{.models | json}}">
+        <h1>Debug Information</h1>
+        
+        <h2>Raw Data</h2>
+        <pre>Providers: {{.providers | json}}</pre>
+        <pre>Models: {{.models | json}}</pre>
+        
+        <h2>Parsed Data</h2>
+        <div>
+            <p>Providers count: <span x-text="Object.keys(providers).length"></span></p>
+            <p>Models count: <span x-text="Object.keys(models).length"></span></p>
+        </div>
+        
+        <h2>Provider List</h2>
+        <ul>
+            <template x-for="[name, provider] in Object.entries(providers)" :key="name">
+                <li>
+                    <strong x-text="name"></strong>:
+                    <span x-text="provider.available ? 'Available' : 'Not Available'"></span>
+                    (<span x-text="provider.models ? provider.models.length : 0"></span> models)
+                </li>
+            </template>
+        </ul>
+        
+        <h2>Model List</h2>
+        <ul>
+            <template x-for="[providerName, modelList] in Object.entries(models)" :key="providerName">
+                <li>
+                    <strong x-text="providerName"></strong>:
+                    <ul>
+                        <template x-for="model in modelList" :key="model">
+                            <li x-text="model"></li>
+                        </template>
+                    </ul>
+                </li>
+            </template>
+        </ul>
+    </div>
+
+    <script>
+        function debugApp() {
+            // Get data from HTML data attributes
+            const container = document.querySelector('[x-data="debugApp()"]');
+            const providersData = JSON.parse(container.dataset.providers);
+            const modelsData = JSON.parse(container.dataset.models);
+
+            return {
+                providers: providersData,
+                models: modelsData,
+
+                init() {
+                    console.log('Providers:', this.providers);
+                    console.log('Models:', this.models);
+                    console.log('Providers type:', typeof this.providers);
+                    console.log('Models type:', typeof this.models);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

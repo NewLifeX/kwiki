@@ -1,0 +1,132 @@
+server:
+  port: "8080"
+  host: "localhost"
+  static_dir: "web/static"
+  template_dir: "web/templates"
+  enable_cors: true
+  max_file_size: 104857600  # 100MB
+
+ai:
+  default_provider: "ollama"
+  providers:
+    openai:
+      api_key: ""  # Set via OPENAI_API_KEY environment variable
+      base_url: ""  # Optional, for custom endpoints
+      model: "gpt-4o-mini"
+      temperature: 0.7
+      max_tokens: 4000
+    
+    gemini:
+      api_key: ""  # Set via GOOGLE_API_KEY environment variable
+      model: "gemini-2.0-flash-exp"
+      temperature: 0.7
+      max_tokens: 4000
+    
+    deepseek:
+      api_key: ""  # Set via DEEPSEEK_API_KEY environment variable
+      model: "deepseek-chat"
+      temperature: 0.7
+      max_tokens: 8000
+
+    ollama:
+      base_url: "http://localhost:11434"  # Set via OLLAMA_HOST environment variable
+      model: "llama3.2:latest"
+      temperature: 0.7
+      max_tokens: 4000
+
+repository:
+  clone_dir: "./repos"
+  max_repo_size: 524288000  # 500MB
+  max_files: 10000
+  exclude_patterns:
+    - "node_modules"
+    - ".git"
+    - "vendor"
+    - "target"
+    - "build"
+    - "dist"
+    - "*.log"
+    - "*.tmp"
+    - ".DS_Store"
+    - "Thumbs.db"
+    - "__pycache__"
+    - "*.pyc"
+    - ".pytest_cache"
+    - ".coverage"
+    - "coverage.xml"
+    - "*.egg-info"
+    - ".venv"
+    - "venv"
+    - ".env"
+  include_patterns:
+    - "*.go"
+    - "*.py"
+    - "*.js"
+    - "*.ts"
+    - "*.jsx"
+    - "*.tsx"
+    - "*.java"
+    - "*.cpp"
+    - "*.c"
+    - "*.h"
+    - "*.hpp"
+    - "*.rs"
+    - "*.rb"
+    - "*.php"
+    - "*.cs"
+    - "*.kt"
+    - "*.swift"
+    - "*.scala"
+    - "*.r"
+    - "*.m"
+    - "*.sh"
+    - "*.ps1"
+    - "*.sql"
+    - "*.html"
+    - "*.css"
+    - "*.scss"
+    - "*.less"
+    - "*.vue"
+    - "*.dart"
+    - "*.lua"
+    - "*.pl"
+    - "*.clj"
+    - "*.ex"
+    - "*.erl"
+    - "*.hs"
+    - "*.ml"
+    - "*.fs"
+    - "*.jl"
+    - "*.nim"
+    - "*.zig"
+    - "*.md"
+    - "*.txt"
+    - "*.rst"
+    - "*.yaml"
+    - "*.yml"
+    - "*.json"
+    - "*.toml"
+    - "*.xml"
+    - "*.ini"
+    - "*.cfg"
+    - "*.conf"
+    - "Dockerfile"
+    - "Makefile"
+    - "CMakeLists.txt"
+    - "*.cmake"
+    - "package.json"
+    - "requirements.txt"
+    - "Cargo.toml"
+    - "go.mod"
+    - "pom.xml"
+    - "build.gradle"
+    - "composer.json"
+    - "Gemfile"
+
+generator:
+  output_dir: "./output"
+  enable_diagrams: true
+  enable_rag: true
+  chunk_size: 1000
+  chunk_overlap: 200
+  max_concurrency: 5

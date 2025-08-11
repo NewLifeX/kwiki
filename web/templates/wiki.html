@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="{{if eq .wiki.Settings.Language "zh"}}zh-CN{{else}}en{{end}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.wiki.Title}} - KWiki</title>
+    <meta name="description" content="{{.wiki.Description}}">
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <!-- Additional language support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/rust.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/dockerfile.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <style>
+        /* DeepWiki Style System */
+        :root {
+            --color-bg: #ffffff;
+            --color-bg-secondary: #f8fafc;
+            --color-border: #e2e8f0;
+            --color-border-light: #f1f5f9;
+            --color-text: #1e293b;
+            --color-text-secondary: #64748b;
+            --color-text-muted: #94a3b8;
+            --color-primary: #3b82f6;
+            --color-primary-hover: #2563eb;
+            --sidebar-width: 280px;
+            --toc-width: 240px;
+            --header-height: 64px;
+        }
+        
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--color-bg);
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+        
+        /* Layout */
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        .sidebar {
+            width: var(--sidebar-width);
+            background: var(--color-bg);
+            border-right: 1px solid var(--color-border);
+            position: fixed;
+            left: 0;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            margin-right: var(--toc-width);
+            min-height: 100vh;
+        }
+        
+        .toc-sidebar {
+            width: var(--toc-width);
+            position: fixed;
+            right: 0;
+            top: 0;
+            height: 100vh;
+            background: var(--color-bg);
+            border-left: 1px solid var(--color-border);
+            overflow-y: auto;
+            z-index: 50;
+        }
+        
+        /* Header */
+        .header {
+            height: var(--header-height);
+            background: var(--color-bg);
+            border-bottom: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--color-text-secondary);
+        }
+        
+        .breadcrumb a {
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .breadcrumb a:hover {
+            color: var(--color-primary);
+        }
+        
+        .breadcrumb-separator {
+            color: var(--color-text-muted);
+            font-size: 12px;
+        }
+        
+        /* Sidebar Styles */
+        .sidebar-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--color-border-light);
+        }
+        
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 0 0 8px 0;
+        }
+        
+        .sidebar-description {
+            font-size: 14px;
+            color: var(--color-text-secondary);
+            margin: 0;
+        }
+        
+        .sidebar-nav {
+            padding: 16px 0;
+        }
+        
+        .nav-section {
+            margin-bottom: 24px;
+        }
+        
+        .nav-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0 24px 8px 24px;
+            margin: 0;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 24px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            position: relative;
+        }
+
+        .nav-item:hover {
+            background: var(--color-bg-secondary);
+            color: var(--color-text);
+        }
+
+        .nav-item.active {
+            background: var(--color-bg-secondary);
+            color: var(--color-primary);
+            border-left-color: var(--color-primary);
+            font-weight: 500;
+        }
+
+        .nav-item.active::after {
+            content: '';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 6px;
+            background: var(--color-primary);
+            border-radius: 50%;
+        }
+
+        .nav-item-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 8px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        /* Language Group Styles */
+        .language-group {
+            margin-bottom: 16px;
+        }
+
+        .language-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            color: var(--color-text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            background: var(--color-bg-secondary);
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .file-count {
+            margin-left: auto;
+            font-size: 11px;
+            opacity: 0.7;
+            background: var(--color-bg);
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        .language-files {
+            margin-left: 8px;
+            border-left: 2px solid var(--color-border);
+            padding-left: 12px;
+        }
+
+        .file-item {
+            font-size: 13px;
+            padding: 8px 12px;
+            margin-bottom: 2px;
+        }
+
+        .nav-item:hover .nav-item-icon,
+        .nav-item.active .nav-item-icon {
+            opacity: 1;
+        }
+
+        /* Code Highlighting Styles */
+        .prose pre {
+            background: #0d1117 !important;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .prose pre code {
+            background: transparent !important;
+            color: #e6edf3 !important;
+            font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            padding: 0;
+            border: none;
+        }
+
+        .prose code:not(pre code) {
+            background: var(--color-bg-secondary);
+            color: var(--color-primary);
+            font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--color-border);
+        }
+
+        /* Copy button for code blocks - handled by JavaScript */
+
+        /* Language label */
+        .prose pre[data-language]::after {
+            content: attr(data-language);
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: #21262d;
+            color: #7d8590;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Content Styles */
+        .content {
+            padding: 32px 48px;
+            max-width: 800px;
+        }
+        
+        .content h1 {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--color-text);
+            margin: 0 0 16px 0;
+            line-height: 1.2;
+        }
+        
+        .content h2 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 32px 0 16px 0;
+            line-height: 1.3;
+        }
+        
+        .content h3 {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 24px 0 12px 0;
+            line-height: 1.4;
+        }
+        
+        .content h4 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 20px 0 8px 0;
+            line-height: 1.5;
+        }
+        
+        .content p {
+            margin: 0 0 16px 0;
+            color: var(--color-text-secondary);
+            line-height: 1.7;
+        }
+        
+        .content pre {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 24px 0;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            border: 1px solid #334155;
+            position: relative;
+        }
+
+        .content pre::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899);
+            border-radius: 8px 8px 0 0;
+        }
+
+        .content code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+        }
+
+        .content pre code {
+            color: #e2e8f0;
+            background: none;
+            padding: 0;
+        }
+
+        .content :not(pre) > code {
+            background: var(--color-bg-secondary);
+            color: var(--color-primary);
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid var(--color-border-light);
+        }
+
+        .content blockquote {
+            background: var(--color-bg-secondary);
+            border-left: 4px solid var(--color-primary);
+            padding: 16px 20px;
+            margin: 24px 0;
+            border-radius: 0 8px 8px 0;
+            font-style: italic;
+        }
+
+        .content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--color-border);
+        }
+
+        .content th,
+        .content td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border-light);
+        }
+
+        .content th {
+            background: var(--color-bg-secondary);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .content tr:hover {
+            background: var(--color-bg-secondary);
+        }
+
+        .content ul,
+        .content ol {
+            margin: 16px 0;
+            padding-left: 24px;
+        }
+
+        .content li {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+
+        /* Mermaid Diagram Styles */
+        .mermaid-inline {
+            margin: 24px 0;
+            padding: 20px;
+            background: var(--color-bg-secondary);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            text-align: center;
+            overflow-x: auto;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .mermaid-inline svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Mermaid theme customization */
+        .mermaid-inline .node rect,
+        .mermaid-inline .node circle,
+        .mermaid-inline .node ellipse,
+        .mermaid-inline .node polygon {
+            fill: var(--color-bg);
+            stroke: var(--color-primary);
+            stroke-width: 2px;
+        }
+
+        .mermaid-inline .edgePath .path {
+            stroke: var(--color-text-secondary);
+            stroke-width: 2px;
+        }
+
+        .mermaid-inline .edgeLabel {
+            background-color: var(--color-bg);
+            color: var(--color-text);
+        }
+        
+        /* TOC Styles */
+        .toc-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--color-border-light);
+        }
+        
+        .toc-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin: 0;
+        }
+        
+        .toc-content {
+            padding: 16px 0;
+        }
+        
+        .toc-item {
+            display: block;
+            padding: 6px 24px;
+            color: var(--color-text-secondary);
+            text-decoration: none;
+            font-size: 13px;
+            line-height: 1.5;
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+            border-radius: 0 4px 4px 0;
+            margin: 1px 0;
+        }
+
+        .toc-item:hover {
+            color: var(--color-text);
+            background: var(--color-bg-secondary);
+        }
+
+        .toc-item.active {
+            color: var(--color-primary);
+            border-left-color: var(--color-primary);
+            background: var(--color-bg-secondary);
+            font-weight: 500;
+        }
+
+        .toc-item.level-2 {
+            padding-left: 32px;
+            font-size: 12px;
+        }
+        .toc-item.level-3 {
+            padding-left: 40px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        .toc-item.level-4 {
+            padding-left: 48px;
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* TOC Progress Indicator */
+        .toc-progress {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 2px;
+            background: var(--color-primary);
+            transition: all 0.3s ease;
+            border-radius: 0 2px 2px 0;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .toc-sidebar {
+                display: none;
+            }
+            .main-content {
+                margin-right: 0;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .main-content {
+                margin-left: 0;
+            }
+            .content {
+                padding: 24px;
+            }
+        }
+        
+        /* Scrollbar */
+        .sidebar::-webkit-scrollbar,
+        .toc-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-track,
+        .toc-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb,
+        .toc-sidebar::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 3px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb:hover,
+        .toc-sidebar::-webkit-scrollbar-thumb:hover {
+            background: var(--color-text-muted);
+        }
+    </style>
+</head>
+
+<body x-data="wikiApp()">
+    <div class="layout">
+        <!-- Left Sidebar -->
+        <aside class="sidebar" :class="{'open': sidebarOpen}">
+            <div class="sidebar-header">
+                <h1 class="sidebar-title">{{.wiki.Title}}</h1>
+                <p class="sidebar-description">{{.wiki.Description}}</p>
+            </div>
+
+            <nav class="sidebar-nav">
+                <!-- Files Section (by Language) -->
+                <div class="nav-section">
+                    <h3 class="nav-section-title">{{if eq .wiki.Settings.Language "zh"}}文件{{else}}Files{{end}}</h3>
+                    <template x-for="(pages, language) in groupedPages" :key="language">
+                        <div class="language-group">
+                            <div class="language-header">
+                                <i class="fas fa-globe nav-item-icon"></i>
+                                <span x-text="getLanguageName(language)"></span>
+                                <span class="file-count" x-text="`(${pages.length})`"></span>
+                            </div>
+                            <div class="language-files">
+                                <template x-for="page in pages" :key="page.id">
+                                    <a href="#page-{{.ID}}"
+                                       @click="showPage(page.id)"
+                                       class="nav-item file-item"
+                                       :class="{'active': currentPage === page.id}">
+                                        <i class="fas fa-file-text nav-item-icon"></i>
+                                        <span x-text="page.title"></span>
+                                    </a>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Diagrams Section -->
+                {{if .wiki.Diagrams}}
+                <div class="nav-section">
+                    <h3 class="nav-section-title">{{if eq .wiki.Settings.Language "zh"}}图表{{else}}Diagrams{{end}}</h3>
+                    {{range .wiki.Diagrams}}
+                    <a href="#diagram-{{.ID}}"
+                       @click="showDiagram('{{.ID}}')"
+                       class="nav-item"
+                       :class="{'active': currentDiagram === '{{.ID}}'}">
+                        <i class="fas fa-chart-bar nav-item-icon"></i>
+                        <span>{{.Title}}</span>
+                    </a>
+                    {{end}}
+                </div>
+                {{end}}
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <nav class="breadcrumb">
+                    <a href="/">
+                        <i class="fas fa-home"></i>
+                        KWiki
+                    </a>
+                    <span class="breadcrumb-separator">
+                        <i class="fas fa-chevron-right"></i>
+                    </span>
+                    <span>{{.wiki.Title}}</span>
+                    <template x-if="currentPageTitle">
+                        <div class="flex items-center gap-2">
+                            <span class="breadcrumb-separator">
+                                <i class="fas fa-chevron-right"></i>
+                            </span>
+                            <span x-text="currentPageTitle"></span>
+                        </div>
+                    </template>
+                </nav>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content">
+                <!-- Page Content -->
+                <div x-show="view === 'page'">
+                    <template x-for="page in pages" :key="page.id">
+                        <div x-show="currentPage === page.id">
+                            <h1 x-text="page.title"></h1>
+                            <div x-html="renderMarkdown(page.content)" class="prose"></div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Diagram Content -->
+                <div x-show="view === 'diagram'">
+                    <template x-for="diagram in diagrams" :key="diagram.id">
+                        <div x-show="currentDiagram === diagram.id">
+                            <h1 x-text="diagram.title"></h1>
+                            <div class="mermaid" x-text="diagram.content"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right TOC Sidebar -->
+        <aside class="toc-sidebar">
+            <div class="toc-header">
+                <h3 class="toc-title">{{if eq .wiki.Settings.Language "zh"}}目录{{else}}Table of Contents{{end}}</h3>
+            </div>
+
+            <nav class="toc-content">
+                <template x-for="item in tocItems" :key="item.id">
+                    <a :href="`#${item.id}`"
+                       @click="scrollToHeading(item.id)"
+                       class="toc-item"
+                       :class="{'active': activeHeading === item.id, [`level-${item.level}`]: true}"
+                       x-text="item.text">
+                    </a>
+                </template>
+            </nav>
+        </aside>
+    </div>
+
+    <!-- Mobile Menu Button -->
+    <button @click="sidebarOpen = !sidebarOpen"
+            class="fixed top-4 left-4 z-50 md:hidden bg-white p-2 rounded-lg shadow-lg border">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <script>
+        function wikiApp() {
+            return {
+                // State
+                view: 'page',
+                currentPage: '{{if .wiki.Pages}}{{(index .wiki.Pages 0).ID}}{{end}}',
+                currentDiagram: '',
+                currentPageTitle: '',
+                sidebarOpen: false,
+                activeHeading: '',
+                tocItems: [],
+
+                // Data
+                pages: {{.wiki.Pages | jsonRaw}},
+                diagrams: {{.wiki.Diagrams | jsonRaw}},
+
+                // Computed properties
+                get groupedPages() {
+                    const grouped = {};
+                    this.pages.forEach(page => {
+                        // Extract language from page ID (format: title_language)
+                        const language = this.extractLanguageFromPageId(page.id);
+                        if (!grouped[language]) {
+                            grouped[language] = [];
+                        }
+                        grouped[language].push(page);
+                    });
+                    return grouped;
+                },
+
+                init() {
+                    // Initialize Mermaid
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'default',
+                        securityLevel: 'loose'
+                    });
+
+                    // Show first page by default
+                    if (this.pages.length > 0) {
+                        this.showPage(this.pages[0].id);
+                    }
+
+                    // Setup scroll listener for TOC
+                    this.setupScrollListener();
+
+                    // Setup responsive behavior
+                    this.setupResponsive();
+                },
+
+                showPage(pageId) {
+                    console.log('Switching to page:', pageId);
+                    this.view = 'page';
+                    this.currentPage = pageId;
+                    this.currentDiagram = '';
+
+                    // Update page title
+                    const page = this.pages.find(p => p.id === pageId);
+                    this.currentPageTitle = page ? page.title : '';
+
+                    // Clear existing TOC
+                    this.tocItems = [];
+                    this.activeHeading = '';
+
+                    // Use multiple nextTick calls to ensure DOM is fully updated
+                    this.$nextTick(() => {
+                        this.$nextTick(() => {
+                            // Add a small delay to ensure Alpine.js has finished rendering
+                            setTimeout(() => {
+                                this.generateTOC();
+                                this.renderMermaidDiagrams();
+                                this.highlightCodeBlocks();
+                            }, 100);
+                        });
+                    });
+                },
+
+                showDiagram(diagramId) {
+                    this.view = 'diagram';
+                    this.currentDiagram = diagramId;
+                    this.currentPage = '';
+                    this.currentPageTitle = '';
+
+                    // Clear TOC for diagrams
+                    this.tocItems = [];
+
+                    this.$nextTick(() => {
+                        this.renderMermaidDiagrams();
+                    });
+                },
+
+                generateTOC() {
+                    this.tocItems = [];
+
+                    // Find all page content divs and look for the visible one
+                    const pageContentDivs = document.querySelectorAll('[x-show*="currentPage"]');
+                    let currentPageElement = null;
+
+                    // Find the visible page element by checking display style
+                    for (const div of pageContentDivs) {
+                        if (div.style.display !== 'none' && div.offsetParent !== null) {
+                            currentPageElement = div;
+                            break;
+                        }
+                    }
+
+                    // Fallback: try to find by checking all prose elements
+                    if (!currentPageElement) {
+                        const proseElements = document.querySelectorAll('.prose');
+                        for (const prose of proseElements) {
+                            if (prose.offsetParent !== null) {
+                                currentPageElement = prose.closest('div');
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!currentPageElement) {
+                        console.log('Current page element not found for:', this.currentPage);
+                        return;
+                    }
+
+                    // Look for prose content within the current page
+                    const content = currentPageElement.querySelector('.prose') || currentPageElement;
+                    if (!content) {
+                        console.log('Prose content not found in current page');
+                        return;
+                    }
+
+                    const headings = content.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    console.log(`Found ${headings.length} headings in page ${this.currentPage}`);
+
+                    headings.forEach((heading, index) => {
+                        const level = parseInt(heading.tagName.charAt(1));
+                        const text = heading.textContent.trim();
+                        const id = `heading-${this.currentPage}-${index}`;
+
+                        // Add ID to heading
+                        heading.id = id;
+
+                        // Only show h2-h4 in TOC
+                        if (level >= 2 && level <= 4) {
+                            this.tocItems.push({
+                                id: id,
+                                text: text,
+                                level: level
+                            });
+                        }
+                    });
+
+                    // Set first heading as active
+                    if (this.tocItems.length > 0) {
+                        this.activeHeading = this.tocItems[0].id;
+                    }
+
+                    console.log(`Generated TOC with ${this.tocItems.length} items for page ${this.currentPage}`);
+                },
+
+                setupScrollListener() {
+                    const content = document.querySelector('.main-content');
+                    if (!content) return;
+
+                    content.addEventListener('scroll', () => {
+                        this.updateActiveHeading();
+                    });
+                },
+
+                updateActiveHeading() {
+                    // Find the currently visible page content using the same logic as generateTOC
+                    const pageContentDivs = document.querySelectorAll('[x-show*="currentPage"]');
+                    let currentPageElement = null;
+
+                    for (const div of pageContentDivs) {
+                        if (div.style.display !== 'none' && div.offsetParent !== null) {
+                            currentPageElement = div;
+                            break;
+                        }
+                    }
+
+                    if (!currentPageElement) {
+                        const proseElements = document.querySelectorAll('.prose');
+                        for (const prose of proseElements) {
+                            if (prose.offsetParent !== null) {
+                                currentPageElement = prose.closest('div');
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!currentPageElement) return;
+
+                    const headings = currentPageElement.querySelectorAll('h2, h3, h4');
+                    const scrollTop = document.querySelector('.main-content')?.scrollTop || 0;
+
+                    let activeId = '';
+                    for (let i = headings.length - 1; i >= 0; i--) {
+                        const heading = headings[i];
+                        const rect = heading.getBoundingClientRect();
+
+                        if (rect.top <= 100) {
+                            activeId = heading.id;
+                            break;
+                        }
+                    }
+
+                    if (activeId) {
+                        this.activeHeading = activeId;
+                    }
+                },
+
+                scrollToHeading(headingId) {
+                    const element = document.getElementById(headingId);
+                    if (element) {
+                        const mainContent = document.querySelector('.main-content');
+                        const elementTop = element.offsetTop - 80; // Account for header
+
+                        mainContent.scrollTo({
+                            top: elementTop,
+                            behavior: 'smooth'
+                        });
+                    }
+                },
+
+                renderMarkdown(content) {
+                    if (!content) return '';
+
+                    // Configure marked to use highlight.js and handle Mermaid
+                    marked.setOptions({
+                        highlight: function(code, lang) {
+                            // Handle Mermaid diagrams
+                            if (lang === 'mermaid') {
+                                return `<div class="mermaid-inline">${code}</div>`;
+                            }
+
+                            if (lang && hljs.getLanguage(lang)) {
+                                try {
+                                    return hljs.highlight(code, { language: lang }).value;
+                                } catch (err) {
+                                    console.warn('Highlight.js error:', err);
+                                }
+                            }
+                            return hljs.highlightAuto(code).value;
+                        },
+                        breaks: true,
+                        gfm: true
+                    });
+
+                    let html = marked.parse(content);
+
+                    // Also handle Mermaid code blocks that might not have explicit language
+                    html = html.replace(/<pre><code class="language-mermaid">([\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+
+                    // Handle generic code blocks that contain Mermaid syntax
+                    html = html.replace(/<pre><code>(graph\s+(?:TD|TB|BT|RL|LR)[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(flowchart\s+(?:TD|TB|BT|RL|LR)[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(sequenceDiagram[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(classDiagram[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(stateDiagram[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(erDiagram[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(gantt[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+                    html = html.replace(/<pre><code>(pie[\s\S]*?)<\/code><\/pre>/g,
+                        '<div class="mermaid-inline">$1</div>');
+
+                    return html;
+                },
+
+                async renderMermaidDiagrams() {
+                    await this.$nextTick();
+
+                    // Handle both standalone diagrams and inline diagrams
+                    const mermaidElements = document.querySelectorAll('.mermaid, .mermaid-inline');
+                    for (let element of mermaidElements) {
+                        if (!element.getAttribute('data-processed')) {
+                            try {
+                                const graphDefinition = element.textContent.trim();
+
+                                // Skip empty or invalid content
+                                if (!graphDefinition || graphDefinition.length < 10) {
+                                    element.style.display = 'none';
+                                    element.setAttribute('data-processed', 'true');
+                                    continue;
+                                }
+
+                                // Generate unique ID for each diagram
+                                const diagramId = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                                const { svg } = await mermaid.render(diagramId, graphDefinition);
+
+                                // Add styling for inline diagrams
+                                if (element.classList.contains('mermaid-inline')) {
+                                    element.style.cssText = `
+                                        margin: 20px 0;
+                                        padding: 16px;
+                                        background: #f8fafc;
+                                        border: 1px solid #e2e8f0;
+                                        border-radius: 8px;
+                                        text-align: center;
+                                        overflow-x: auto;
+                                    `;
+                                }
+
+                                element.innerHTML = svg;
+                                element.setAttribute('data-processed', 'true');
+                            } catch (error) {
+                                console.error('Mermaid rendering failed:', error, 'Content:', element.textContent);
+                                // Hide the element instead of showing error for empty content
+                                if (!element.textContent.trim()) {
+                                    element.style.display = 'none';
+                                } else {
+                                    element.innerHTML = `<div style="color: #dc3545; padding: 16px; border: 1px solid #dc3545; border-radius: 4px; background: #f8d7da;">
+                                        <strong>Failed to render Mermaid diagram</strong><br>
+                                        <small>${error.message || 'Unknown error'}</small>
+                                    </div>`;
+                                }
+                                element.setAttribute('data-processed', 'true');
+                            }
+                        }
+                    }
+                },
+
+                highlightCodeBlocks() {
+                    // Find all code blocks in the current page and apply syntax highlighting
+                    const codeBlocks = document.querySelectorAll('pre code');
+                    codeBlocks.forEach((block, index) => {
+                        const pre = block.parentElement;
+
+                        // Skip if already highlighted
+                        if (!block.getAttribute('data-highlighted')) {
+                            // Detect language from class name
+                            const className = block.className;
+                            const langMatch = className.match(/language-(\w+)/);
+                            const language = langMatch ? langMatch[1] : 'text';
+
+                            // Set language attribute for styling
+                            pre.setAttribute('data-language', language);
+
+                            // Apply syntax highlighting
+                            hljs.highlightElement(block);
+                            block.setAttribute('data-highlighted', 'true');
+
+                            // Add copy functionality
+                            this.addCopyButton(pre, block, index);
+                        }
+                    });
+
+                    // Also highlight inline code if needed
+                    const inlineCodeBlocks = document.querySelectorAll('code:not(pre code)');
+                    inlineCodeBlocks.forEach(block => {
+                        if (!block.getAttribute('data-highlighted') && block.textContent.length > 20) {
+                            // Only highlight longer inline code blocks
+                            hljs.highlightElement(block);
+                            block.setAttribute('data-highlighted', 'true');
+                        }
+                    });
+                },
+
+                addCopyButton(pre, codeBlock, index) {
+                    // Remove existing copy button if any
+                    const existingButton = pre.querySelector('.copy-button');
+                    if (existingButton) {
+                        existingButton.remove();
+                    }
+
+                    // Create copy button
+                    const copyButton = document.createElement('button');
+                    copyButton.className = 'copy-button';
+                    copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                    copyButton.title = 'Copy code';
+                    copyButton.style.cssText = `
+                        position: absolute;
+                        top: 8px;
+                        right: 8px;
+                        background: #21262d;
+                        color: #7d8590;
+                        border: none;
+                        padding: 6px 8px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                        cursor: pointer;
+                        opacity: 0;
+                        transition: all 0.2s;
+                        z-index: 1;
+                    `;
+
+                    // Add hover effects
+                    copyButton.addEventListener('mouseenter', () => {
+                        copyButton.style.background = '#30363d';
+                        copyButton.style.color = '#f0f6fc';
+                    });
+
+                    copyButton.addEventListener('mouseleave', () => {
+                        copyButton.style.background = '#21262d';
+                        copyButton.style.color = '#7d8590';
+                    });
+
+                    // Add copy functionality
+                    copyButton.addEventListener('click', async () => {
+                        try {
+                            await navigator.clipboard.writeText(codeBlock.textContent);
+                            copyButton.innerHTML = '<i class="fas fa-check"></i>';
+                            copyButton.style.color = '#28a745';
+                            setTimeout(() => {
+                                copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                                copyButton.style.color = '#7d8590';
+                            }, 2000);
+                        } catch (err) {
+                            console.error('Failed to copy code:', err);
+                            copyButton.innerHTML = '<i class="fas fa-times"></i>';
+                            copyButton.style.color = '#dc3545';
+                            setTimeout(() => {
+                                copyButton.innerHTML = '<i class="fas fa-copy"></i>';
+                                copyButton.style.color = '#7d8590';
+                            }, 2000);
+                        }
+                    });
+
+                    // Show/hide button on hover
+                    pre.addEventListener('mouseenter', () => {
+                        copyButton.style.opacity = '1';
+                    });
+
+                    pre.addEventListener('mouseleave', () => {
+                        copyButton.style.opacity = '0';
+                    });
+
+                    pre.appendChild(copyButton);
+                },
+
+                // Helper methods for language grouping
+                extractLanguageFromPageId(pageId) {
+                    // Extract language from page ID (format: title_language)
+                    const parts = pageId.split('_');
+                    if (parts.length >= 2) {
+                        const lastPart = parts[parts.length - 1];
+                        // Check if last part is a language code
+                        if (['zh', 'en', 'es', 'fr', 'de', 'ja', 'ko'].includes(lastPart)) {
+                            return lastPart;
+                        }
+                    }
+                    // Default to 'en' if no language detected
+                    return 'en';
+                },
+
+                getLanguageName(languageCode) {
+                    const languageNames = {
+                        'zh': '中文',
+                        'en': 'English',
+                        'es': 'Español',
+                        'fr': 'Français',
+                        'de': 'Deutsch',
+                        'ja': '日本語',
+                        'ko': '한국어'
+                    };
+                    return languageNames[languageCode] || languageCode.toUpperCase();
+                },
+
+                setupResponsive() {
+                    const handleResize = () => {
+                        if (window.innerWidth >= 768) {
+                            this.sidebarOpen = false;
+                        }
+                    };
+
+                    window.addEventListener('resize', handleResize);
+                    handleResize();
+                },
+
+                // Initialize the component
+                init() {
+                    // Setup responsive behavior
+                    this.setupResponsive();
+
+                    // Initialize code highlighting after a short delay
+                    setTimeout(() => {
+                        this.highlightCodeBlocks();
+                        this.generateTOC();
+                        this.renderMermaidDiagrams();
+                    }, 200);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

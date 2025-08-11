@@ -1,0 +1,7 @@
+# KWiki 文档生成器配置
+
+# 阅读速度配置（每分钟阅读单词数）
+reading_speed: 200
+
+# 模板目录路径
+template_dir: "templates/prompts"
