@@ -1,0 +1,100 @@
+<svg width="400" height="160" viewBox="0 0 400 160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4F46E5;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#6366F1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E0E7FF;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge> 
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background with rounded corners and shadow -->
+  <rect width="400" height="160" rx="20" ry="20" fill="url(#bgGradient)" filter="url(#shadow)" />
+  
+  <!-- Decorative background pattern -->
+  <g opacity="0.1">
+    <circle cx="50" cy="40" r="6" fill="#FFFFFF" />
+    <circle cx="350" cy="120" r="4" fill="#FFFFFF" />
+    <circle cx="340" cy="40" r="3" fill="#FFFFFF" />
+    <circle cx="60" cy="120" r="2" fill="#FFFFFF" />
+  </g>
+  
+  <!-- AI Brain Icon (larger) -->
+  <g transform="translate(30, 50)">
+    <!-- Brain outline -->
+    <path d="M16 10C16 5 20 2 25 2C30 2 34 5 34 10C38 10 41 13 41 17C41 21 38 24 34 24C34 29 30 32 25 32C20 32 16 29 16 24C12 24 9 21 9 17C9 13 12 10 16 10Z" 
+          fill="none" 
+          stroke="#FFFFFF" 
+          stroke-width="2.5" 
+          opacity="0.9"/>
+    <!-- Neural connections -->
+    <circle cx="20" cy="16" r="2" fill="#FFFFFF" opacity="0.7" />
+    <circle cx="30" cy="12" r="2" fill="#FFFFFF" opacity="0.7" />
+    <circle cx="24" cy="22" r="2" fill="#FFFFFF" opacity="0.7" />
+    <circle cx="28" cy="18" r="1.5" fill="#FFFFFF" opacity="0.6" />
+    <!-- Connection lines -->
+    <line x1="20" y1="16" x2="30" y2="12" stroke="#FFFFFF" stroke-width="1" opacity="0.5" />
+    <line x1="30" y1="12" x2="24" y2="22" stroke="#FFFFFF" stroke-width="1" opacity="0.5" />
+    <line x1="24" y1="22" x2="20" y2="16" stroke="#FFFFFF" stroke-width="1" opacity="0.5" />
+    <line x1="28" y1="18" x2="30" y2="12" stroke="#FFFFFF" stroke-width="0.8" opacity="0.4" />
+    <line x1="28" y1="18" x2="24" y2="22" stroke="#FFFFFF" stroke-width="0.8" opacity="0.4" />
+  </g>
+  
+  <!-- KWiki Text (larger) -->
+  <text x="100" y="85" 
+        font-family="Arial, sans-serif" 
+        font-size="48" 
+        font-weight="bold" 
+        fill="url(#textGradient)" 
+        filter="url(#glow)">KWiki</text>
+  
+  <!-- Subtitle -->
+  <text x="100" y="110" 
+        font-family="Arial, sans-serif" 
+        font-size="16" 
+        fill="#FFFFFF" 
+        opacity="0.9">AI-Powered Wiki Generator for Code Repositories</text>
+  
+  <!-- Code brackets decoration (larger) -->
+  <g transform="translate(310, 50)" opacity="0.7">
+    <path d="M0 10 L6 16 L0 22" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M16 10 L10 16 L16 22" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+  
+  <!-- Document/Wiki icon -->
+  <g transform="translate(320, 90)" opacity="0.6">
+    <rect x="0" y="0" width="12" height="16" rx="1" fill="none" stroke="#FFFFFF" stroke-width="1.5" />
+    <line x1="2" y1="4" x2="10" y2="4" stroke="#FFFFFF" stroke-width="1" />
+    <line x1="2" y1="7" x2="10" y2="7" stroke="#FFFFFF" stroke-width="1" />
+    <line x1="2" y1="10" x2="8" y2="10" stroke="#FFFFFF" stroke-width="1" />
+  </g>
+  
+  <!-- Sparkle effects (larger) -->
+  <g opacity="0.8">
+    <path d="M90 30 L92 34 L96 32 L92 36 L90 40 L88 36 L84 32 L88 34 Z" fill="#FFFFFF" />
+    <path d="M330 70 L332 74 L336 72 L332 76 L330 80 L328 76 L324 72 L328 74 Z" fill="#FFFFFF" />
+    <path d="M70 100 L71 102 L73 101 L71 103 L70 105 L69 103 L67 101 L69 102 Z" fill="#FFFFFF" />
+  </g>
+  
+  <!-- Tech elements -->
+  <g transform="translate(350, 30)" opacity="0.5">
+    <!-- Gear icon -->
+    <circle cx="8" cy="8" r="3" fill="none" stroke="#FFFFFF" stroke-width="1" />
+    <circle cx="8" cy="8" r="1.5" fill="#FFFFFF" />
+    <path d="M8 0 L9 2 L11 1 L10 3 L12 4 L10 5 L11 7 L9 6 L8 8 L7 6 L5 7 L6 5 L4 4 L6 3 L5 1 L7 2 Z" 
+          fill="none" stroke="#FFFFFF" stroke-width="0.8" />
+  </g>
+</svg>

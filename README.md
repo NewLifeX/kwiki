@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![KWiki Logo](https://via.placeholder.com/200x80/4F46E5/FFFFFF?text=KWiki)
+![KWiki Logo](assets/logo.svg)
 
 **🚀 智能代码文档生成工具**
 
