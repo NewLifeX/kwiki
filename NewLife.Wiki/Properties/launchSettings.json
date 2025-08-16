@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "NewLife.Wiki": {
+      "commandName": "Project",
+      "commandLineArgs": "generate D:\\X\\NewLife.Map",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:23276;http://localhost:23277"
+    }
+  }
+}
