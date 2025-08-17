@@ -1,4 +1,4 @@
-using NewLife.Log;
+﻿using NewLife.Log;
 using NewLife.Wiki.AI;
 using NewLife.Wiki.Analyzer;
 using NewLife.Wiki.Models;
@@ -36,10 +36,12 @@ public class WikiGenerator
         // 尝试通过 AI 生成项目概要（可选）
         var overview = GenerateOverview(structure, language);
 
-        var files = new List<String>();
-        files.Add(WriteReadme(structure, overview, outputDir, language));
-        files.Add(WriteArchitecture(structure, outputDir, language));
-        files.Add(WriteApiReference(structure, outputDir, language));
+        var files = new List<String>
+        {
+            WriteReadme(structure, overview, outputDir, language),
+            WriteArchitecture(structure, outputDir, language),
+            WriteApiReference(structure, outputDir, language)
+        };
 
         Log?.Info("Generated {0} files to {1}", files.Count, outputDir);
         return files;

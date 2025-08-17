@@ -1,23 +1,17 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
 using System.Text.Json;
 using System.Text.Json.Serialization;
-#endif
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NewLife.Wiki.AI;
 
 /// <summary>DeepSeek 提供者实现。兼容 OpenAI Chat Completions 风格。</summary>
 public sealed class DeepSeekProvider : IAIProvider, IDisposable
 {
+    #region 属性
     /// <summary>名称</summary>
     public String Name { get; } = "deepseek";
+    #endregion
 
     private readonly String _apiKey;
     private readonly String _model;
@@ -128,46 +122,15 @@ public sealed class DeepSeekProvider : IAIProvider, IDisposable
         return list;
     }
 
-    private static String Serialize(ChatRequest req)
-    {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
-        return JsonSerializer.Serialize(req, JsonOptions);
-#else
-        var sb = new StringBuilder();
-        sb.Append('{');
-        sb.Append("\"model\":\"").Append(req.Model).Append('\"');
-        sb.Append(",\"messages\":[");
-        for (var i = 0; i < req.Messages.Count; i++)
-        {
-            if (i > 0) sb.Append(',');
-            var m = req.Messages[i];
-            sb.Append('{').Append("\"role\":\"").Append(m.Role).Append("\",\"content\":\"").Append(m.Content?.Replace("\"", "\\\"")).Append("\"}");
-        }
-        sb.Append(']');
-        sb.Append(",\"temperature\":").Append(req.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        if (req.MaxTokens > 0) sb.Append(",\"max_tokens\":").Append(req.MaxTokens);
-        if (req.Stream) sb.Append(",\"stream\":true");
-        sb.Append('}');
-        return sb.ToString();
-#endif
-    }
+    private static String Serialize(ChatRequest req) => JsonSerializer.Serialize(req, JsonOptions);
 
-    private static ChatResponse? Deserialize(String json)
-    {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
-        try { return JsonSerializer.Deserialize<ChatResponse>(json, JsonOptions); } catch { return null; }
-#else
-        return null;
-#endif
-    }
+    private static ChatResponse? Deserialize(String json) { try { return JsonSerializer.Deserialize<ChatResponse>(json, JsonOptions); } catch { return null; } }
 
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-#endif
 
     /// <summary>释放 HttpClient</summary>
     public void Dispose() => _http.Dispose();
@@ -176,29 +139,39 @@ public sealed class DeepSeekProvider : IAIProvider, IDisposable
     private sealed class ChatRequest
     {
         public String Model { get; set; } = String.Empty;
-        public List<ChatMessage> Messages { get; set; } = new();
+
+        public List<ChatMessage> Messages { get; set; } = [];
+
         public Double Temperature { get; set; }
+
         public Int32 MaxTokens { get; set; }
+
         public Boolean Stream { get; set; }
-        public Dictionary<String, Object?> Extra { get; set; } = new();
+
+        public Dictionary<String, Object?> Extra { get; set; } = [];
     }
 
     private sealed class ChatMessage
     {
         public String Role { get; set; } = String.Empty;
+
         public String? Content { get; set; }
     }
 
     private sealed class ChatResponse
     {
-        public List<Choice> Choices { get; set; } = new();
+        public List<Choice> Choices { get; set; } = [];
+
         public UsageInfo? Usage { get; set; }
 
         public sealed class Choice
         {
             public Int32 Index { get; set; }
+
             public ChatMessage? Message { get; set; }
+
             public DeltaMessage? Delta { get; set; }
+
             public String? FinishReason { get; set; }
         }
 
@@ -210,6 +183,7 @@ public sealed class DeepSeekProvider : IAIProvider, IDisposable
         public sealed class UsageInfo
         {
             public Int32 PromptTokens { get; set; }
+
             public Int32 CompletionTokens { get; set; }
         }
     }

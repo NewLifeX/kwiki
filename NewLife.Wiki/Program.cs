@@ -1,4 +1,4 @@
-using NewLife.Log;
+﻿using NewLife.Log;
 using NewLife.Wiki;
 using NewLife.Wiki.AI;
 using NewLife.Wiki.Config;
@@ -131,7 +131,7 @@ async Task AiTest(String[] args)
     var prompt = args.FirstOrDefault(a => a.StartsWith("--prompt="))?.Substring("--prompt=".Length) ?? "请用一句话介绍本项目";
     var providerName = args.FirstOrDefault(a => a.StartsWith("--provider="))?.Substring("--provider=".Length) ?? (config.AI.DefaultProvider ?? (config.AI.Providers.Keys.FirstOrDefault() ?? "openai"));
 
-    var manager = new NewLife.Wiki.AI.AIProviderManager();
+    var manager = new AIProviderManager();
     if (String.IsNullOrEmpty(providerName) || !config.AI.Providers.TryGetValue(providerName, out var p)) { XTrace.WriteLine("配置中未找到AI提供者: {0}", providerName); return; }
 
     switch (providerName.ToLowerInvariant())
@@ -139,20 +139,20 @@ async Task AiTest(String[] args)
         case "openai":
             var openaiKey = p.ApiKey ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
             if (String.IsNullOrEmpty(openaiKey)) { XTrace.WriteLine("缺少OpenAI ApiKey，设置环境变量 OPENAI_API_KEY"); return; }
-            manager.Register(new NewLife.Wiki.AI.OpenAIProvider(providerName, openaiKey, p.BaseUrl, p.Model));
+            manager.Register(new OpenAIProvider(providerName, openaiKey, p.BaseUrl, p.Model));
             break;
         case "gemini":
             var geminiKey = p.ApiKey ?? Environment.GetEnvironmentVariable("GOOGLE_API_KEY") ?? "";
             if (String.IsNullOrEmpty(geminiKey)) { XTrace.WriteLine("缺少Gemini ApiKey，设置环境变量 GOOGLE_API_KEY"); return; }
-            manager.Register(new NewLife.Wiki.AI.GeminiProvider(providerName, geminiKey, p.Model ?? "gemini-2.0-flash-exp", p.BaseUrl));
+            manager.Register(new GeminiProvider(providerName, geminiKey, p.Model ?? "gemini-2.0-flash-exp", p.BaseUrl));
             break;
         case "deepseek":
             var deepseekKey = p.ApiKey ?? Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY") ?? "";
             if (String.IsNullOrEmpty(deepseekKey)) { XTrace.WriteLine("缺少DeepSeek ApiKey，设置环境变量 DEEPSEEK_API_KEY"); return; }
-            manager.Register(new NewLife.Wiki.AI.DeepSeekProvider(deepseekKey, p.Model ?? "deepseek-chat", p.BaseUrl));
+            manager.Register(new DeepSeekProvider(deepseekKey, p.Model ?? "deepseek-chat", p.BaseUrl));
             break;
         case "ollama":
-            manager.Register(new NewLife.Wiki.AI.OllamaProvider(p.Model ?? "llama3", p.BaseUrl));
+            manager.Register(new OllamaProvider(p.Model ?? "llama3", p.BaseUrl));
             break;
         default:
             XTrace.WriteLine("暂未实现该提供者: {0}", providerName); return;
@@ -160,7 +160,7 @@ async Task AiTest(String[] args)
 
     var prov = manager.Get(providerName);
     XTrace.WriteLine("使用提供者 {0} 调用模型 {1} ...", providerName, p.Model ?? "(默认)");
-    var res = await prov.GenerateAsync(new NewLife.Wiki.AI.GenerationOptions { Prompt = prompt, Model = p.Model, Temperature = p.Temperature, MaxTokens = p.MaxTokens }, CancellationToken.None);
+    var res = await prov.GenerateAsync(new GenerationOptions { Prompt = prompt, Model = p.Model, Temperature = p.Temperature, MaxTokens = p.MaxTokens }, CancellationToken.None);
     XTrace.WriteLine("AI 输出长度={0}", res.Text?.Length ?? 0);
     Console.WriteLine("---- AI 输出 ----\n" + res.Text);
 }

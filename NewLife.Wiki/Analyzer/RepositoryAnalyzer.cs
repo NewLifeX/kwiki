@@ -1,7 +1,7 @@
+﻿using System.Security.Cryptography;
+using System.Text;
 using NewLife.Log;
 using NewLife.Wiki.Models;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace NewLife.Wiki.Analyzer;
 

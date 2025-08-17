@@ -1,14 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Net.Http;
-using System.Text;
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-#endif
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NewLife.Wiki.AI;
 
@@ -50,7 +42,13 @@ public sealed class OllamaProvider : IAIProvider, IDisposable
     private async Task<GenerationResult> SendAsync(GenerationOptions opt, Func<StreamDelta, Task<Boolean>>? onDelta, CancellationToken ct)
     {
         var url = _baseUrl + (opt.Stream ? "/api/stream" : "/api/generate");
-    var req = new OllamaRequest { Model = _model, Prompt = opt.Prompt ?? String.Empty, Stream = opt.Stream, Options = new Dictionary<String, Object?>() };
+        var req = new OllamaRequest
+        {
+            Model = _model,
+            Prompt = opt.Prompt ?? String.Empty,
+            Stream = opt.Stream,
+            Options = []
+        };
         if (opt.Temperature > 0) req.Options["temperature"] = opt.Temperature;
         if (opt.MaxTokens > 0) req.Options["num_predict"] = opt.MaxTokens;
         var json = Serialize(req);
@@ -99,29 +97,19 @@ public sealed class OllamaProvider : IAIProvider, IDisposable
 
     private static String Serialize(OllamaRequest req)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
         return JsonSerializer.Serialize(req, JsonOptions);
-#else
-        return "{\"model\":\"" + req.Model + "\",\"prompt\":\"" + req.Prompt.Replace("\"", "\\\"") + "\",\"stream\":false}"; // 简化
-#endif
     }
 
     private static OllamaResponse? Deserialize(String json)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
         try { return JsonSerializer.Deserialize<OllamaResponse>(json, JsonOptions); } catch { return null; }
-#else
-        return null;
-#endif
     }
 
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-#endif
 
     /// <summary>释放 HttpClient</summary>
     public void Dispose() => _http.Dispose();
@@ -132,7 +120,7 @@ public sealed class OllamaProvider : IAIProvider, IDisposable
         public String Model { get; set; } = String.Empty;
         public String Prompt { get; set; } = String.Empty;
         public Boolean Stream { get; set; }
-        public Dictionary<String, Object?> Options { get; set; } = new();
+        public Dictionary<String, Object?> Options { get; set; } = [];
     }
 
     private sealed class OllamaResponse

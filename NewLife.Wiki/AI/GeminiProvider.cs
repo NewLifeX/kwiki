@@ -1,14 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Net.Http;
-using System.Text;
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
+﻿using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-#endif
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NewLife.Wiki.AI;
 
@@ -108,29 +100,29 @@ public class GeminiProvider : IAIProvider, IDisposable
     {
         var req = new GeminiRequest
         {
-            Contents = new List<GeminiRequest.Content>
-            {
+            Contents =
+            [
                 new()
                 {
                     Role = "user",
-                    Parts = new List<GeminiRequest.Part> { new() { Text = opt.Prompt } }
+                    Parts = [new() { Text = opt.Prompt }]
                 }
-            }
+            ]
         };
         var cfg = new GeminiRequest.GenerationConfig
         {
             Temperature = opt.Temperature,
             MaxOutputTokens = opt.MaxTokens > 0 ? opt.MaxTokens : (Int32?)null
         };
-    req.Generation = cfg;
+        req.Generation = cfg;
         return req;
     }
 
     private static String ExtractText(GeminiResponse? resp)
     {
-    if (resp?.Candidates == null || resp.Candidates.Count == 0) return String.Empty;
-    var cand = resp.Candidates[0];
-    if (cand?.Content?.Parts == null || cand.Content.Parts.Count == 0) return String.Empty;
+        if (resp?.Candidates == null || resp.Candidates.Count == 0) return String.Empty;
+        var cand = resp.Candidates[0];
+        if (cand?.Content?.Parts == null || cand.Content.Parts.Count == 0) return String.Empty;
         var sb = new StringBuilder();
         foreach (var p in cand.Content.Parts)
         {
@@ -141,34 +133,19 @@ public class GeminiProvider : IAIProvider, IDisposable
 
     private static String Serialize(GeminiRequest req)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
         return JsonSerializer.Serialize(req, JsonOpts);
-#else
-        // 极简序列化，仅包含 prompt
-        var sb = new StringBuilder();
-        sb.Append("{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"")
-          .Append(req.Contents[0].Parts[0].Text.Replace("\"", "\\\""))
-          .Append("\"}]}]}");
-        return sb.ToString();
-#endif
     }
 
     private static GeminiResponse? Deserialize(String json)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
         try { return JsonSerializer.Deserialize<GeminiResponse>(json, JsonOpts); } catch { return null; }
-#else
-        return null;
-#endif
     }
 
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER || NETSTANDARD2_0
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
-#endif
 
     /// <summary>释放 HttpClient</summary>
     public void Dispose() => _http.Dispose();
@@ -176,13 +153,13 @@ public class GeminiProvider : IAIProvider, IDisposable
     #region DTO
     private sealed class GeminiRequest
     {
-        public List<Content> Contents { get; set; } = new();
+        public List<Content> Contents { get; set; } = [];
         public GenerationConfig? Generation { get; set; }
 
         public sealed class Content
         {
             public String? Role { get; set; }
-            public List<Part> Parts { get; set; } = new();
+            public List<Part> Parts { get; set; } = [];
         }
 
         public sealed class Part
@@ -199,7 +176,7 @@ public class GeminiProvider : IAIProvider, IDisposable
 
     private sealed class GeminiResponse
     {
-        public List<Candidate> Candidates { get; set; } = new();
+        public List<Candidate> Candidates { get; set; } = [];
 
         public sealed class Candidate
         {
@@ -209,7 +186,7 @@ public class GeminiProvider : IAIProvider, IDisposable
 
         public sealed class Content
         {
-            public List<Part> Parts { get; set; } = new();
+            public List<Part> Parts { get; set; } = [];
         }
 
         public sealed class Part

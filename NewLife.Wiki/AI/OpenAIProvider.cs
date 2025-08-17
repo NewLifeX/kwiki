@@ -1,15 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text;
-#if NET6_0_OR_GREATER || NETSTANDARD2_0 || NET5_0_OR_GREATER || NET8_0_OR_GREATER
 using System.Text.Json;
 using System.Text.Json.Serialization;
-#endif
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace NewLife.Wiki.AI;
 
@@ -83,7 +75,7 @@ public class OpenAIProvider : IAIProvider, IDisposable
             }
         }
 
-    var payload = Serialize(req);
+        var payload = Serialize(req);
         using var msg = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -143,60 +135,26 @@ public class OpenAIProvider : IAIProvider, IDisposable
     private static List<ChatMessage> BuildMessages(GenerationOptions opt)
     {
         var list = new List<ChatMessage>();
-    if (!String.IsNullOrEmpty(opt.System)) list.Add(new ChatMessage { Role = "system", Content = opt.System });
-    list.Add(new ChatMessage { Role = "user", Content = opt.Prompt ?? String.Empty });
+        if (!String.IsNullOrEmpty(opt.System)) list.Add(new ChatMessage { Role = "system", Content = opt.System });
+        list.Add(new ChatMessage { Role = "user", Content = opt.Prompt ?? String.Empty });
         return list;
     }
 
     private static String Serialize(ChatRequest req)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER
         return JsonSerializer.Serialize(req, JsonOptions);
-#else
-        // 简单手写序列化，满足最小字段
-        var sb = new StringBuilder();
-        sb.Append('{');
-        sb.Append("\"model\":\"").Append(req.Model).Append('\"');
-        sb.Append(",\"messages\":[");
-        for (var i = 0; i < req.Messages.Count; i++)
-        {
-            if (i > 0) sb.Append(',');
-            var m = req.Messages[i];
-            sb.Append('{').Append("\"role\":\"").Append(m.Role).Append("\",\"content\":\"").Append(Escape(m.Content)).Append("\"}");
-        }
-        sb.Append(']');
-        sb.Append(",\"temperature\":").Append(req.Temperature.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        sb.Append(",\"max_tokens\":").Append(req.MaxTokens);
-        if (req.Stream) sb.Append(",\"stream\":true");
-        sb.Append('}');
-        return sb.ToString();
-#endif
     }
 
     private static ChatResponse? Deserialize(String json)
     {
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER
         return JsonSerializer.Deserialize<ChatResponse>(json, JsonOptions);
-#else
-        return null; // 旧框架简化：不支持JSON解析（需升级或添加库）
-#endif
     }
 
-#if NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
-#endif
-
-#if !(NET6_0_OR_GREATER || NET5_0_OR_GREATER || NET8_0_OR_GREATER)
-    private static String Escape(String? v)
-    {
-        if (String.IsNullOrEmpty(v)) return String.Empty;
-        return v.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
-    }
-#endif
 
     /// <summary>释放底层 HttpClient</summary>
     public void Dispose() => _http.Dispose();
@@ -205,11 +163,11 @@ public class OpenAIProvider : IAIProvider, IDisposable
     private sealed class ChatRequest
     {
         public String Model { get; set; } = String.Empty;
-        public List<ChatMessage> Messages { get; set; } = new();
+        public List<ChatMessage> Messages { get; set; } = [];
         public Double Temperature { get; set; }
         public Int32 MaxTokens { get; set; }
         public Boolean Stream { get; set; }
-        public Dictionary<String, Object?> Extra { get; set; } = new();
+        public Dictionary<String, Object?> Extra { get; set; } = [];
     }
 
     private sealed class ChatMessage
@@ -221,7 +179,7 @@ public class OpenAIProvider : IAIProvider, IDisposable
     private sealed class ChatResponse
     {
         public String? Id { get; set; }
-        public List<Choice> Choices { get; set; } = new();
+        public List<Choice> Choices { get; set; } = [];
         public UsageInfo? Usage { get; set; }
 
         public sealed class Choice
